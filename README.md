@@ -1,11 +1,16 @@
-# Help Assistant
+# VaultBot Help Assistant
 
-Get answers from Veeva documentation and best practices.
+Veeva Vault help chatbot — keyword-based demo mode out of the box, Amazon Bedrock for production AI responses.
+
+## Quick Start
+
+Double-click **`start.bat`** — it starts the backend, waits for it to be ready, starts the frontend, then opens the browser automatically.
 
 ## Project Structure
 
 ```
 help_assistant/
+├── start.bat
 ├── backend/
 │   ├── main.py
 │   ├── models.py
@@ -19,22 +24,16 @@ help_assistant/
     ├── package.json
     ├── vite.config.js
     └── src/
-        ├── App.jsx
-        ├── App.css
-        ├── components/
-        └── services/
 ```
 
-## Setup
+## Manual Setup
 
 ### Backend
 ```bash
 cd backend
-python -m venv venv
-venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-copy .env.example .env   # then fill in your API keys
-uvicorn main:app --reload --port 8002
+python -m pip install -r requirements.txt
+copy .env.example .env   # fill in AWS credentials if using Bedrock
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Frontend
@@ -43,3 +42,9 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## LLM Backend
+
+Set `LLM_BACKEND` in `backend/.env`:
+- `demo` — built-in keyword engine, no API key needed (default)
+- `bedrock` — Amazon Bedrock (fill in AWS credentials in `.env`)
