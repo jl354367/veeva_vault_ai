@@ -1,0 +1,297 @@
+{
+  "organization": {
+    "name": "Cognizant Life Sciences",
+    "vault_domain": "cognizant.veevavault.com",
+    "vault_types": ["QualityDocs", "RIM", "Clinical"],
+    "total_users": 342,
+    "total_documents": 18540
+  },
+  "vaults": [
+    {
+      "id": "vault_qdocs",
+      "name": "QualityDocs Vault",
+      "type": "QualityDocs",
+      "region": "US",
+      "environment": "Production",
+      "version": "24R3",
+      "status": "Active"
+    },
+    {
+      "id": "vault_rim",
+      "name": "RIM Vault",
+      "type": "RIM",
+      "region": "US",
+      "environment": "Production",
+      "version": "24R3",
+      "status": "Active"
+    },
+    {
+      "id": "vault_ctms",
+      "name": "CTMS Vault",
+      "type": "Clinical",
+      "region": "EU",
+      "environment": "Production",
+      "version": "24R3",
+      "status": "Active"
+    }
+  ],
+  "document_types": [
+    {
+      "name": "Standard Operating Procedure",
+      "label": "SOP",
+      "vault": "QualityDocs",
+      "lifecycle": "SOP Lifecycle",
+      "subtypes": ["Manufacturing SOP", "Quality SOP", "Safety SOP"],
+      "fields": ["document_number", "version", "effective_date", "owner", "department", "review_period_years"]
+    },
+    {
+      "name": "Protocol",
+      "label": "Protocol",
+      "vault": "Clinical",
+      "lifecycle": "Clinical Document Lifecycle",
+      "subtypes": ["Study Protocol", "Amendment Protocol"],
+      "fields": ["study_number", "phase", "indication", "sponsor", "sites"]
+    },
+    {
+      "name": "Quality Manual",
+      "label": "QM",
+      "vault": "QualityDocs",
+      "lifecycle": "Quality Manual Lifecycle",
+      "subtypes": [],
+      "fields": ["revision", "scope", "iso_section"]
+    },
+    {
+      "name": "Regulatory Submission",
+      "label": "REG",
+      "vault": "RIM",
+      "lifecycle": "Regulatory Lifecycle",
+      "subtypes": ["NDA", "BLA", "IND", "ANDA"],
+      "fields": ["submission_type", "agency", "product", "sequence_number", "submission_date"]
+    },
+    {
+      "name": "Change Control",
+      "label": "CC",
+      "vault": "QualityDocs",
+      "lifecycle": "Change Control Lifecycle",
+      "subtypes": ["Minor Change", "Major Change", "Emergency Change"],
+      "fields": ["change_number", "risk_level", "impact_assessment", "implementation_date"]
+    },
+    {
+      "name": "CAPA",
+      "label": "CAPA",
+      "vault": "QualityDocs",
+      "lifecycle": "CAPA Lifecycle",
+      "subtypes": ["Corrective Action", "Preventive Action"],
+      "fields": ["capa_number", "source", "root_cause", "due_date", "effectiveness_check_date"]
+    },
+    {
+      "name": "Training Record",
+      "label": "TR",
+      "vault": "QualityDocs",
+      "lifecycle": "Training Lifecycle",
+      "subtypes": ["Curriculum Training", "OJT Training"],
+      "fields": ["trainee", "training_date", "trainer", "assessment_score", "expiry_date"]
+    }
+  ],
+  "lifecycles": [
+    {
+      "name": "SOP Lifecycle",
+      "vault": "QualityDocs",
+      "states": [
+        {"name": "Draft", "type": "steady", "entry_actions": [], "is_initial": true},
+        {"name": "In Review", "type": "steady", "entry_actions": ["notify_reviewers"]},
+        {"name": "In Approval", "type": "steady", "entry_actions": ["notify_approvers"]},
+        {"name": "Approved", "type": "steady", "entry_actions": ["set_effective_date", "archive_previous_version"]},
+        {"name": "Effective", "type": "steady", "entry_actions": ["notify_training_team"]},
+        {"name": "Obsolete", "type": "steady", "entry_actions": ["remove_from_training"]}
+      ],
+      "transitions": [
+        {"name": "Submit for Review", "from": "Draft", "to": "In Review", "actions": ["check_required_fields"]},
+        {"name": "Submit for Approval", "from": "In Review", "to": "In Approval", "actions": []},
+        {"name": "Approve", "from": "In Approval", "to": "Approved", "actions": ["set_version_number"]},
+        {"name": "Make Effective", "from": "Approved", "to": "Effective", "actions": ["notify_all_users"]},
+        {"name": "Reject", "from": "In Review", "to": "Draft", "actions": ["notify_author"]},
+        {"name": "Reject", "from": "In Approval", "to": "Draft", "actions": ["notify_author"]},
+        {"name": "Obsolete", "from": "Effective", "to": "Obsolete", "actions": ["close_training_assignments"]}
+      ]
+    },
+    {
+      "name": "CAPA Lifecycle",
+      "vault": "QualityDocs",
+      "states": [
+        {"name": "Initiated", "type": "steady", "is_initial": true},
+        {"name": "Investigation", "type": "steady"},
+        {"name": "Implementation", "type": "steady"},
+        {"name": "Effectiveness Check", "type": "steady"},
+        {"name": "Closed", "type": "steady"},
+        {"name": "Cancelled", "type": "steady"}
+      ],
+      "transitions": [
+        {"name": "Start Investigation", "from": "Initiated", "to": "Investigation"},
+        {"name": "Begin Implementation", "from": "Investigation", "to": "Implementation"},
+        {"name": "Complete Implementation", "from": "Implementation", "to": "Effectiveness Check"},
+        {"name": "Close", "from": "Effectiveness Check", "to": "Closed"},
+        {"name": "Cancel", "from": "Initiated", "to": "Cancelled"}
+      ]
+    },
+    {
+      "name": "Change Control Lifecycle",
+      "vault": "QualityDocs",
+      "states": [
+        {"name": "Draft", "type": "steady", "is_initial": true},
+        {"name": "Risk Assessment", "type": "steady"},
+        {"name": "Pending Approval", "type": "steady"},
+        {"name": "Approved", "type": "steady"},
+        {"name": "In Implementation", "type": "steady"},
+        {"name": "Completed", "type": "steady"},
+        {"name": "Rejected", "type": "steady"}
+      ],
+      "transitions": [
+        {"name": "Submit for Risk Assessment", "from": "Draft", "to": "Risk Assessment"},
+        {"name": "Submit for Approval", "from": "Risk Assessment", "to": "Pending Approval"},
+        {"name": "Approve", "from": "Pending Approval", "to": "Approved"},
+        {"name": "Start Implementation", "from": "Approved", "to": "In Implementation"},
+        {"name": "Complete", "from": "In Implementation", "to": "Completed"},
+        {"name": "Reject", "from": "Pending Approval", "to": "Rejected"}
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "name": "Vault Owner",
+      "permissions": ["create", "read", "edit", "delete", "admin"],
+      "document_types": ["All"],
+      "lifecycle_actions": ["All"],
+      "user_count": 3
+    },
+    {
+      "name": "QA Manager",
+      "permissions": ["create", "read", "edit", "approve"],
+      "document_types": ["SOP", "CAPA", "Change Control", "Quality Manual"],
+      "lifecycle_actions": ["Approve", "Make Effective", "Obsolete"],
+      "user_count": 12
+    },
+    {
+      "name": "Document Author",
+      "permissions": ["create", "read", "edit"],
+      "document_types": ["SOP", "CAPA", "Change Control"],
+      "lifecycle_actions": ["Submit for Review"],
+      "user_count": 87
+    },
+    {
+      "name": "Reviewer",
+      "permissions": ["read", "annotate"],
+      "document_types": ["SOP", "Protocol", "Quality Manual"],
+      "lifecycle_actions": ["Submit for Approval", "Reject"],
+      "user_count": 45
+    },
+    {
+      "name": "Regulatory Specialist",
+      "permissions": ["create", "read", "edit", "submit"],
+      "document_types": ["Regulatory Submission"],
+      "lifecycle_actions": ["All RIM transitions"],
+      "user_count": 18
+    },
+    {
+      "name": "Read Only",
+      "permissions": ["read"],
+      "document_types": ["All"],
+      "lifecycle_actions": [],
+      "user_count": 177
+    }
+  ],
+  "workflows": [
+    {
+      "name": "SOP Review and Approval Workflow",
+      "vault": "QualityDocs",
+      "type": "Multi-Document",
+      "steps": [
+        {"step": 1, "name": "Author Review", "participants": "Document Author", "action": "Review and Submit"},
+        {"step": 2, "name": "QA Review", "participants": "Reviewer", "action": "Review Document", "sla_days": 5},
+        {"step": 3, "name": "QA Manager Approval", "participants": "QA Manager", "action": "Approve or Reject", "sla_days": 3},
+        {"step": 4, "name": "Final Release", "participants": "Vault Owner", "action": "Make Effective", "sla_days": 1}
+      ],
+      "notifications": ["email", "in_vault"],
+      "escalation": true,
+      "active": true
+    },
+    {
+      "name": "CAPA Investigation Workflow",
+      "vault": "QualityDocs",
+      "type": "Single Document",
+      "steps": [
+        {"step": 1, "name": "Root Cause Analysis", "participants": "Document Author", "action": "Complete RCA", "sla_days": 10},
+        {"step": 2, "name": "QA Review", "participants": "QA Manager", "action": "Review RCA", "sla_days": 5},
+        {"step": 3, "name": "Implementation Plan", "participants": "Document Author", "action": "Submit Plan", "sla_days": 7},
+        {"step": 4, "name": "Final Approval", "participants": "QA Manager", "action": "Close CAPA", "sla_days": 3}
+      ],
+      "active": true
+    },
+    {
+      "name": "Regulatory Submission Workflow",
+      "vault": "RIM",
+      "type": "Multi-Document",
+      "steps": [
+        {"step": 1, "name": "Compile Submission", "participants": "Regulatory Specialist", "action": "Compile Documents"},
+        {"step": 2, "name": "Medical Review", "participants": "QA Manager", "action": "Medical Sign-off", "sla_days": 14},
+        {"step": 3, "name": "Legal Review", "participants": "Reviewer", "action": "Legal Sign-off", "sla_days": 7},
+        {"step": 4, "name": "Final Submission", "participants": "Vault Owner", "action": "Submit to Agency"}
+      ],
+      "active": true
+    }
+  ],
+  "integrations": [
+    {
+      "name": "Salesforce CRM",
+      "type": "Bidirectional Sync",
+      "vault": "RIM",
+      "data_synced": ["Product records", "Regulatory contacts"],
+      "frequency": "Real-time",
+      "status": "Active"
+    },
+    {
+      "name": "SAP ERP",
+      "type": "Outbound",
+      "vault": "QualityDocs",
+      "data_synced": ["Change Control approvals", "CAPA closures"],
+      "frequency": "Daily batch",
+      "status": "Active"
+    },
+    {
+      "name": "Microsoft Active Directory",
+      "type": "Inbound",
+      "vault": "All",
+      "data_synced": ["User provisioning", "Group membership"],
+      "frequency": "Real-time SSO",
+      "status": "Active"
+    },
+    {
+      "name": "DocuSign",
+      "type": "Outbound",
+      "vault": "QualityDocs",
+      "data_synced": ["eSignature requests", "Signature completion events"],
+      "frequency": "Event-driven",
+      "status": "Active"
+    }
+  ],
+  "custom_objects": [
+    {
+      "name": "Product",
+      "fields": ["product_name", "therapeutic_area", "modality", "development_phase", "regulatory_lead"],
+      "relationships": ["Regulatory Submission", "Protocol"],
+      "record_count": 47
+    },
+    {
+      "name": "Supplier",
+      "fields": ["supplier_name", "category", "qualification_status", "audit_date", "approved_materials"],
+      "relationships": ["Change Control", "CAPA"],
+      "record_count": 213
+    },
+    {
+      "name": "Site",
+      "fields": ["site_name", "country", "site_type", "principal_investigator", "enrollment_status"],
+      "relationships": ["Protocol"],
+      "record_count": 89
+    }
+  ]
+}

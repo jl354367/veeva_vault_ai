@@ -1,5 +1,6 @@
 # Environment — never commit real credentials
 backend/.env
+impact_analyzer/backend/.env
 
 # Python
 __pycache__/
@@ -18,6 +19,10 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 frontend/.env.local
+impact_analyzer/frontend/node_modules/
+impact_analyzer/frontend/dist/
+impact_analyzer/frontend/.env
+impact_analyzer/frontend/.env.local
 
 # Scraped data (auto-generated, can be large)
 backend/data/help_docs.json
@@ -25,8 +30,12 @@ backend/data/vault_help.json
 
 # ChromaDB / vector store (auto-generated at startup)
 backend/chroma_db/
+impact_analyzer/backend/chroma_db/
 *.db
 *.sqlite
+
+# Logs
+*.log
 
 # OS
 .DS_Store

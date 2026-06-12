@@ -1,0 +1,18 @@
+fastapi==0.115.5
+pip-system-certs
+uvicorn[standard]==0.32.1
+openai>=1.0.0
+chromadb>=1.0.0
+python-multipart==0.0.12
+python-dotenv==1.0.1
+pandas>=2.2.3
+openpyxl>=3.1.5
+pydantic>=2.10.3
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+# Amazon Bedrock (optional — only required when AWS_ACCESS_KEY_ID is configured)
+boto3>=1.35.0
+# Extended file format support
+pdfplumber>=0.11.0
+python-docx>=1.1.0
