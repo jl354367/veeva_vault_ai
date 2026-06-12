@@ -1,0 +1,33 @@
+# Environment — never commit real credentials
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Scraped data (auto-generated, can be large)
+backend/data/help_docs.json
+backend/data/vault_help.json
+
+# ChromaDB / vector store (auto-generated at startup)
+backend/chroma_db/
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db

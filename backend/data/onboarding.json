@@ -1,0 +1,20 @@
+[
+  {
+    "id": "onboard_001",
+    "title": "Welcome to VaultBot",
+    "section": "Overview",
+    "content": "VaultBot is an AI-powered assistant for Veeva Vault. It helps users navigate Vault configurations, search help documentation, and onboard to their specific Vault implementation."
+  },
+  {
+    "id": "onboard_002",
+    "title": "Getting Started with Veeva Vault",
+    "section": "Getting Started",
+    "content": "Veeva Vault is a cloud-based content management platform. Key areas include Document Management, Lifecycle Management, Workflows, and User/Role Administration."
+  },
+  {
+    "id": "onboard_003",
+    "title": "Key Vault Concepts",
+    "section": "Concepts",
+    "content": "Document Types define the structure and metadata of documents. Lifecycles control the states a document can be in. Workflows automate review and approval processes. Roles and permissions govern user access."
+  }
+]

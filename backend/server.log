@@ -1,0 +1,4 @@
+[Help Assistant] Help data is stale — starting background scrape…
+Help Assistant initialized.
+[Scraper] platform: 586 pages found
+INFO:     127.0.0.1:53635 - "GET /health HTTP/1.1" 200 OK
