@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Impact Analyzer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --navy:#0033A0;--violet:#7c3aed;--ok:#059669;--warn:#d97706;--bad:#dc2626;
+  --paper:#f8fafc;--border:rgba(0,0,0,0.08);--text:#1e293b;--muted:#64748b;--faint:#94a3b8;
+  --surface:#f1f5f9;--white:#ffffff;--topbar-h:48px;
+}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--text);font-size:13px;}
+/* ===== APP SHELL ===== */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;z-index:20;}
+.topbar-logo{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;color:var(--navy);}
+.logo-dot{width:10px;height:10px;background:linear-gradient(135deg,var(--navy),var(--violet));border-radius:50%;}
+.topbar-right{display:flex;align-items:center;gap:14px;}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--violet));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;cursor:pointer;}
+.notif-btn{position:relative;width:32px;height:32px;border-radius:50%;background:var(--surface);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);}
+.notif-dot{width:7px;height:7px;background:var(--bad);border-radius:50%;position:absolute;top:5px;right:5px;border:1.5px solid white;}
+.body{display:flex;flex:1;overflow:hidden;}
+/* ===== SIDEBAR ===== */
+.sidebar{width:220px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.sidebar-section{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:16px 16px 4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--muted);cursor:pointer;border-left:2.5px solid transparent;transition:all .12s;}
+.nav-item:hover{background:var(--surface);color:var(--text);}
+.nav-item.active{background:#eff6ff;color:var(--navy);font-weight:700;border-left-color:var(--navy);}
+.nav-item i{font-size:15px;}
+/* ===== MAIN ===== */
+.main{flex:1;overflow-y:auto;padding:24px;background:var(--paper);}
+.page{display:none;}
+.page.active{display:block;}
+.page-header{margin-bottom:22px;}
+.page-header h1{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.page-header p{font-size:12px;color:var(--muted);}
+/* ===== INTEL PANE ===== */
+.intel-pane{width:220px;background:var(--white);border-left:1px solid var(--border);flex-shrink:0;overflow-y:auto;padding:16px 14px;}
+.intel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:12px;}
+.intel-card{background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.intel-card-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.intel-card-sub{font-size:11px;color:var(--muted);}
+.intel-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-top:5px;}
+/* ===== IMPACT ANALYZER PAGE ===== */
+.stage-strip{display:flex;align-items:center;gap:0;margin-bottom:24px;background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.stage-tab{flex:1;padding:14px 20px;display:flex;align-items:center;gap:10px;cursor:pointer;border-right:1px solid var(--border);transition:background .12s;position:relative;}
+.stage-tab:last-child{border-right:none;}
+.stage-tab.active{background:#eff6ff;}
+.stage-tab.done{background:#f0fdf4;}
+.stage-tab.locked{opacity:.5;cursor:not-allowed;}
+.stage-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.sn-active{background:var(--navy);color:white;}
+.sn-done{background:var(--ok);color:white;}
+.sn-pending{background:var(--surface);color:var(--faint);border:1.5px solid var(--border);}
+.stage-info{flex:1;}
+.stage-name{font-size:13px;font-weight:700;color:var(--text);}
+.stage-desc{font-size:11px;color:var(--muted);margin-top:2px;}
+.stage-arrow{font-size:18px;color:var(--border);padding:0 8px;flex-shrink:0;}
+.stage-arrow:last-of-type{display:none;}
+/* upload area */
+.upload-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+.upload-card-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+.upload-card-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
+.dropzone{border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface);}
+.dropzone:hover,.dropzone.dragging{border-color:var(--navy);background:#eff6ff;}
+.dropzone i{font-size:28px;color:var(--faint);display:block;margin:0 auto 8px;}
+.dropzone .dz-title{font-size:13px;font-weight:600;color:var(--text);}
+.dropzone .dz-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.file-list{margin-top:12px;}
+.file-item{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--white);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+.file-item i{font-size:16px;color:var(--navy);}
+.file-name{flex:1;font-size:12px;font-weight:600;}
+.file-size{font-size:11px;color:var(--muted);}
+.file-remove{background:none;border:none;cursor:pointer;color:var(--faint);font-size:14px;padding:2px;}
+.file-remove:hover{color:var(--bad);}
+/* badges */
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;}
+.badge-blue{background:#dbeafe;color:#1d4ed8;}
+.badge-green{background:#d1fae5;color:#065f46;}
+.badge-amber{background:#fef3c7;color:#92400e;}
+.badge-red{background:#fee2e2;color:#991b1b;}
+.badge-violet{background:#ede9fe;color:#5b21b6;}
+.badge-gray{background:var(--surface);color:var(--muted);}
+/* run button */
+.run-btn{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--navy),var(--violet));color:white;border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .12s;}
+.run-btn:disabled{opacity:.4;cursor:not-allowed;}
+.run-btn:not(:disabled):hover{opacity:.9;}
+/* agent status */
+.agent-status{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+.agent-status-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.agent-status-title{font-size:14px;font-weight:700;}
+.pipeline-steps{display:flex;flex-direction:column;gap:8px;}
+.pipe-step{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;background:var(--surface);}
+.pipe-step.done{background:#f0fdf4;}
+.pipe-step.running{background:#eff6ff;border:1px solid #bfdbfe;}
+.pipe-step.pending{opacity:.5;}
+.pipe-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.pi-done{background:var(--ok);color:white;}
+.pi-running{background:var(--navy);color:white;}
+.pi-pending{background:var(--surface);border:1.5px solid var(--border);color:var(--faint);}
+.pipe-label{font-size:12px;font-weight:600;flex:1;}
+.pipe-time{font-size:11px;color:var(--muted);}
+/* spinner */
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:4px;}
+/* report */
+.report-card{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+.report-header{background:linear-gradient(135deg,#0033A0,#7c3aed);color:white;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+.report-header-title{font-size:15px;font-weight:700;}
+.report-header-meta{font-size:11px;opacity:.8;margin-top:3px;}
+.report-body{padding:20px;}
+.report-section{margin-bottom:20px;}
+.report-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.impact-table{width:100%;border-collapse:collapse;}
+.impact-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);padding:6px 10px;text-align:left;background:var(--surface);border-bottom:1px solid var(--border);}
+.impact-table td{font-size:12px;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+.impact-table tr:hover td{background:var(--surface);}
+.impact-table tr:last-child td{border-bottom:none;}
+.severity-high{color:var(--bad);font-weight:700;}
+.severity-med{color:var(--warn);font-weight:700;}
+.severity-low{color:var(--ok);font-weight:700;}
+/* LLM chat */
+.llm-panel{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+.llm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface);}
+.llm-header-title{font-size:13px;font-weight:700;flex:1;}
+.llm-messages{padding:14px;max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.msg{max-width:85%;padding:10px 14px;border-radius:10px;font-size:12px;line-height:1.6;}
+.msg-user{background:var(--navy);color:white;align-self:flex-end;border-bottom-right-radius:3px;}
+.msg-ai{background:var(--surface);color:var(--text);align-self:flex-start;border-bottom-left-radius:3px;border:1px solid var(--border);}
+.msg-ai strong{color:var(--navy);}
+.llm-input-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
+.llm-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;outline:none;background:var(--paper);}
+.llm-input:focus{border-color:var(--navy);}
+.llm-send{background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;}
+.llm-send:hover{background:#0026b5;}
+/* highlight clickable sections */
+.clickable-section{cursor:pointer;border-left:3px solid transparent;padding-left:8px;transition:all .1s;border-radius:0 4px 4px 0;}
+.clickable-section:hover{border-left-color:var(--violet);background:#faf5ff;}
+/* scrollbar */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+/* KPI strip */
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.kpi-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.kpi-val{font-size:26px;font-weight:700;line-height:1;margin-bottom:4px;}
+.kpi-label{font-size:11px;color:var(--muted);}
+/* tabs */
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.tab{padding:9px 16px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tab.active{color:var(--navy);border-bottom-color:var(--navy);}
+.tab:hover{color:var(--text);}
+/* progress bar */
+.prog-bar{height:4px;background:var(--surface);border-radius:2px;overflow:hidden;margin-top:4px;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--navy),var(--violet));border-radius:2px;transition:width .4s;}
+/* connecting arrow between stages */
+.stage-connector{display:flex;align-items:center;padding:0 4px;color:var(--faint);font-size:18px;}
+/* tooltip on report rows */
+.row-ask{display:none;background:none;border:none;cursor:pointer;color:var(--violet);font-size:11px;font-weight:700;padding:0 4px;}
+tr:hover .row-ask{display:inline;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="logo-dot"></div>
+      Impact Analyzer
+    </div>
+    <div class="topbar-right">
+      <button onclick="resetAll()" id="reset-btn" title="Reset everything and start a new analysis" style="display:flex;align-items:center;gap:6px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        <i class="ti ti-refresh" style="font-size:14px"></i> Reset
+      </button>
+      <div style="font-size:12px;color:var(--muted);">Powered by Cognizant ISG</div>
+      <div class="avatar">SC</div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">Workspace</div>
+      <div class="nav-item active" id="nav-analyzer" onclick="showPage('analyzer')">
+        <i class="ti ti-radar"></i> Impact Analyzer
+      </div>
+      <div class="nav-item" id="nav-history" onclick="showPage('history')">
+        <i class="ti ti-history"></i> Run history
+      </div>
+      <div class="nav-item" id="nav-audit" onclick="showPage('audit')">
+        <i class="ti ti-report-analytics"></i> Audit log
+      </div>
+      <div class="sidebar-section">Admin</div>
+      <div class="nav-item" onclick="">
+        <i class="ti ti-settings"></i> Settings
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- ===== IMPACT ANALYZER PAGE ===== -->
+      <div class="page active" id="page-analyzer">
+        <div class="page-header">
+          <h1>Impact Analyzer</h1>
+          <p>Upload documents, trigger AWS agents, and review impacted objects &amp; fields</p>
+        </div>
+
+        <!-- STAGE STRIP -->
+        <div class="stage-strip">
+          <div class="stage-tab active" id="stage-tab-1" onclick="switchStage(1)">
+            <div class="stage-num sn-active" id="stagenum-1">1</div>
+            <div class="stage-info">
+              <div class="stage-name">Data Model Impact</div>
+              <div class="stage-desc">Upload Data Model Changes doc</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;padding:0 4px;color:var(--faint);font-size:20px;">›</div>
+          <div class="stage-tab locked" id="stage-tab-2" onclick="switchStage(2)">
+            <div class="stage-num sn-pending" id="stagenum-2">2</div>
+            <div class="stage-info">
+              <div class="stage-name">Integration Impact</div>
+              <div class="stage-desc">Upload Integration Spec doc</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAGE 1 -->
+        <div id="stage-1-area">
+
+          <!-- UPLOAD -->
+          <div class="upload-card" id="upload-area-1" style="display:block">
+            <div class="upload-card-title">
+              <i class="ti ti-file-upload" style="color:var(--navy)"></i>
+              Data Model Changes Document
+              <span class="badge badge-blue">Required</span>
+            </div>
+            <div class="upload-card-sub">Upload the data model changes document. The agent will retrieve the Config Report from S3 automatically.</div>
+            <div class="dropzone" id="dz1" onclick="triggerFileInput('file1')" ondragover="onDragOver(event,'dz1')" ondragleave="onDragLeave('dz1')" ondrop="onDrop(event,'dz1','file1')">
+              <i class="ti ti-cloud-upload"></i>
+              <div class="dz-title">Drag &amp; drop or click to browse</div>
+              <div class="dz-sub">PDF, DOCX, XLSX · max 50MB</div>
+            </div>
+            <input type="file" id="file1" style="display:none" accept=".pdf,.docx,.xlsx" onchange="onFileSelect('file1','filelist1','dz1')"/>
+            <div class="file-list" id="filelist1"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button class="run-btn" id="run-btn-1" disabled onclick="runStage1()">
+                <i class="ti ti-player-play"></i> Run Agent
+              </button>
+              <span id="run-hint-1" style="font-size:11px;color:var(--muted);">Upload a document to enable</span>
+            </div>
+          </div>
+
+          <!-- AGENT STATUS (hidden until run) -->
+          <div class="agent-status" id="agent-status-1" style="display:none">
+            <div class="agent-status-header">
+              <div class="agent-status-title">
+                <i class="ti ti-cpu" style="color:var(--navy);vertical-align:-2px;margin-right:6px"></i>
+                AWS Agent · Stage 1
+              </div>
+              <span class="badge badge-blue" id="agent-status-badge-1">Running</span>
+            </div>
+            <div class="pipeline-steps" id="pipeline-1">
+              <div class="pipe-step running" id="ps1-0">
+                <div class="pipe-icon pi-running"><span class="spinner" style="border-top-color:white"></span></div>
+                <div class="pipe-label">Triggering AWS agent</div>
+                <div class="pipe-time" id="pt1-0">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps1-1">
+                <div class="pipe-icon pi-pending">2</div>
+                <div class="pipe-label">Fetching Config Report from S3</div>
+                <div class="pipe-time" id="pt1-1">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps1-2">
+                <div class="pipe-icon pi-pending">3</div>
+                <div class="pipe-label">Analyzing impacted objects</div>
+                <div class="pipe-time" id="pt1-2">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps1-3">
+                <div class="pipe-icon pi-pending">4</div>
+                <div class="pipe-label">Identifying impacted fields</div>
+                <div class="pipe-time" id="pt1-3">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps1-4">
+                <div class="pipe-icon pi-pending">5</div>
+                <div class="pipe-label">Generating impact report</div>
+                <div class="pipe-time" id="pt1-4">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STAGE 1 REPORT (hidden until done) -->
+          <div id="report-1" style="display:none">
+            <div class="kpi-strip">
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">14</div><div class="kpi-label">Impacted Objects</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--warn)">37</div><div class="kpi-label">Impacted Fields</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">5</div><div class="kpi-label">High Severity</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--ok)">9</div><div class="kpi-label">Low Risk Changes</div></div>
+            </div>
+
+            <div class="report-card">
+              <div class="report-header">
+                <div>
+                  <div class="report-header-title">Stage 1 — Data Model Impact Report</div>
+                  <div class="report-header-meta">Config Report · Data Model Changes Doc · Generated just now</div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button onclick="exportReport()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;"><i class="ti ti-download" style="vertical-align:-2px;margin-right:4px"></i>Export</button>
+                </div>
+              </div>
+              <div class="report-body">
+                <div class="tab-bar">
+                  <div class="tab active" onclick="switchReportTab(this,'rtab1-obj')">Impacted Objects</div>
+                  <div class="tab" onclick="switchReportTab(this,'rtab1-fields')">Impacted Fields</div>
+                  <div class="tab" onclick="switchReportTab(this,'rtab1-summary')">Summary</div>
+                </div>
+
+                <!-- Objects tab -->
+                <div id="rtab1-obj">
+                  <table class="impact-table">
+                    <thead><tr><th>Object Name</th><th>Type</th><th>Change Type</th><th>Severity</th><th>Affected By</th><th></th></tr></thead>
+                    <tbody>
+                      <tr class="clickable-section" onclick="askAbout('Account object — new field AccountTier added, existing fields ContactCount and RevenueYTD modified')">
+                        <td><strong>Account</strong></td><td><span class="badge badge-blue">Standard</span></td><td>Field Added / Modified</td><td class="severity-high">HIGH</td><td>3 fields</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Account object impact')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout('Opportunity object — StageName picklist values changed and CloseDate validation updated')">
+                        <td><strong>Opportunity</strong></td><td><span class="badge badge-blue">Standard</span></td><td>Picklist Modified</td><td class="severity-high">HIGH</td><td>2 fields</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Opportunity object impact')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout('Custom_Product__c object — 4 new fields added for product taxonomy v2')">
+                        <td><strong>Custom_Product__c</strong></td><td><span class="badge badge-violet">Custom</span></td><td>Field Added</td><td class="severity-med">MED</td><td>4 fields</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Custom_Product__c impact')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout('Contact object — Email field validation rule tightened and Phone field format changed')">
+                        <td><strong>Contact</strong></td><td><span class="badge badge-blue">Standard</span></td><td>Validation Updated</td><td class="severity-med">MED</td><td>2 fields</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Contact object impact')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout('Order_Line__c object — OrderLineStatus picklist deprecated two values')">
+                        <td><strong>Order_Line__c</strong></td><td><span class="badge badge-violet">Custom</span></td><td>Picklist Deprecated</td><td class="severity-high">HIGH</td><td>1 field</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Order_Line__c deprecation impact')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout('Invoice__c object — 3 lookup fields changed targets')">
+                        <td><strong>Invoice__c</strong></td><td><span class="badge badge-violet">Custom</span></td><td>Lookup Changed</td><td class="severity-med">MED</td><td>3 fields</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout('Invoice__c lookup change impact')">Ask AI ›</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Fields tab -->
+                <div id="rtab1-fields" style="display:none">
+                  <table class="impact-table">
+                    <thead><tr><th>Object</th><th>Field API Name</th><th>Change</th><th>Old Value</th><th>New Value</th><th>Severity</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>Account</td><td style="font-family:monospace;font-size:11px">AccountTier__c</td><td>Added</td><td>—</td><td>Picklist</td><td class="severity-high">HIGH</td><td><button class="row-ask" onclick="askAbout('AccountTier__c new field implications')">Ask AI ›</button></td></tr>
+                      <tr><td>Account</td><td style="font-family:monospace;font-size:11px">RevenueYTD__c</td><td>Type change</td><td>Text(50)</td><td>Currency</td><td class="severity-high">HIGH</td><td><button class="row-ask" onclick="askAbout('RevenueYTD field type change from Text to Currency')">Ask AI ›</button></td></tr>
+                      <tr><td>Opportunity</td><td style="font-family:monospace;font-size:11px">StageName</td><td>Picklist value removed</td><td>Prospecting</td><td>—</td><td class="severity-high">HIGH</td><td><button class="row-ask" onclick="askAbout('StageName Prospecting picklist value removal impact')">Ask AI ›</button></td></tr>
+                      <tr><td>Contact</td><td style="font-family:monospace;font-size:11px">Email</td><td>Validation tightened</td><td>No domain check</td><td>Domain whitelist</td><td class="severity-med">MED</td><td><button class="row-ask" onclick="askAbout('Email validation domain whitelist change')">Ask AI ›</button></td></tr>
+                      <tr><td>Order_Line__c</td><td style="font-family:monospace;font-size:11px">OrderLineStatus__c</td><td>Values deprecated</td><td>Draft, Cancelled</td><td>—</td><td class="severity-high">HIGH</td><td><button class="row-ask" onclick="askAbout('OrderLineStatus Draft and Cancelled deprecation')">Ask AI ›</button></td></tr>
+                      <tr><td>Invoice__c</td><td style="font-family:monospace;font-size:11px">Account__c</td><td>Lookup target changed</td><td>Account</td><td>ParentAccount__c</td><td class="severity-med">MED</td><td><button class="row-ask" onclick="askAbout('Invoice Account lookup target change')">Ask AI ›</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Summary tab -->
+                <div id="rtab1-summary" style="display:none">
+                  <div style="background:var(--surface);border-radius:8px;padding:16px;margin-bottom:14px;">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Executive Summary</div>
+                    <p style="font-size:12px;line-height:1.8;color:var(--text);">
+                      The data model changes introduce <strong>14 impacted objects</strong> with <strong>37 field-level changes</strong>. 
+                      Critical items include a type change on <code style="font-size:11px;background:#e2e8f0;padding:1px 4px;border-radius:3px">Account.RevenueYTD__c</code> (Text→Currency) which will break existing numeric transformations, 
+                      and deprecated picklist values on <code style="font-size:11px;background:#e2e8f0;padding:1px 4px;border-radius:3px">Opportunity.StageName</code> that may affect pipeline reporting. 
+                      5 changes are rated HIGH severity and require immediate remediation before deployment.
+                    </p>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div style="background:#fee2e2;border-radius:8px;padding:14px;"><div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">⚠ High Risk (5)</div><ul style="font-size:11px;color:#7f1d1d;padding-left:16px;line-height:2;"><li>Account.RevenueYTD__c type change</li><li>Opportunity.StageName picklist removal</li><li>Order_Line__c status deprecation</li><li>Account.AccountTier__c new required field</li><li>Invoice lookup target change</li></ul></div>
+                    <div style="background:#d1fae5;border-radius:8px;padding:14px;"><div style="font-size:12px;font-weight:700;color:var(--ok);margin-bottom:6px;">✓ Low Risk (9)</div><ul style="font-size:11px;color:#064e3b;padding-left:16px;line-height:2;"><li>New optional fields (no breakage)</li><li>Validation rule additions</li><li>Label-only changes</li><li>New custom objects (additive)</li><li>Help text updates</li></ul></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LLM ASSISTANT -->
+            <div class="llm-panel">
+              <div class="llm-header">
+                <i class="ti ti-sparkles" style="color:var(--violet);font-size:16px"></i>
+                <div class="llm-header-title">AI Assistant — Ask about this report</div>
+                <span class="badge badge-violet">GPT-4o</span>
+              </div>
+              <div class="llm-messages" id="llm-messages-1">
+                <div class="msg msg-ai">
+                  Hi! I've analyzed the Stage 1 impact report. You can <strong>click any row</strong> in the tables above to ask me about it, or type your question below. What would you like to understand?
+                </div>
+              </div>
+              <div class="llm-input-row">
+                <input class="llm-input" id="llm-input-1" placeholder="e.g. Why is RevenueYTD change high risk?" onkeydown="if(event.key==='Enter')sendLLM(1)"/>
+                <button class="llm-send" onclick="sendLLM(1)"><i class="ti ti-send"></i></button>
+              </div>
+            </div>
+
+            <!-- PROCEED TO STAGE 2 -->
+            <div style="background:linear-gradient(135deg,#eff6ff,#ede9fe);border:1px solid #c4b5fd;border-radius:10px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--navy);">Stage 1 complete — proceed to Integration Impact</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:3px;">The Stage 1 report will be used automatically in Stage 2</div>
+              </div>
+              <button class="run-btn" onclick="unlockStage2()">
+                <i class="ti ti-arrow-right"></i> Go to Stage 2
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAGE 2 -->
+        <div id="stage-2-area" style="display:none">
+
+          <div class="upload-card">
+            <div class="upload-card-title">
+              <i class="ti ti-file-code" style="color:var(--violet)"></i>
+              Integration Specification Document
+              <span class="badge badge-violet">Stage 2</span>
+            </div>
+            <div class="upload-card-sub">
+              Upload the Integration Specification. The agent will combine it with the Stage 1 report to produce a final integration impact report.
+            </div>
+            <!-- Stage 1 report chip -->
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ok);">
+              <i class="ti ti-check-circle" style="font-size:14px"></i>
+              <strong>Stage 1 report loaded</strong> &nbsp;·&nbsp; 14 objects · 37 fields · ready for integration analysis
+            </div>
+            <div class="dropzone" id="dz2" onclick="triggerFileInput('file2')" ondragover="onDragOver(event,'dz2')" ondragleave="onDragLeave('dz2')" ondrop="onDrop(event,'dz2','file2')">
+              <i class="ti ti-cloud-upload"></i>
+              <div class="dz-title">Drag &amp; drop or click to browse</div>
+              <div class="dz-sub">PDF, DOCX, XLSX · max 50MB</div>
+            </div>
+            <input type="file" id="file2" style="display:none" accept=".pdf,.docx,.xlsx" onchange="onFileSelect('file2','filelist2','dz2')"/>
+            <div class="file-list" id="filelist2"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button class="run-btn" id="run-btn-2" disabled onclick="runStage2()">
+                <i class="ti ti-player-play"></i> Run Agent
+              </button>
+              <span id="run-hint-2" style="font-size:11px;color:var(--muted);">Upload Integration Spec to enable</span>
+            </div>
+          </div>
+
+          <!-- AGENT STATUS 2 -->
+          <div class="agent-status" id="agent-status-2" style="display:none">
+            <div class="agent-status-header">
+              <div class="agent-status-title">
+                <i class="ti ti-cpu" style="color:var(--violet);vertical-align:-2px;margin-right:6px"></i>
+                AWS Agent · Stage 2
+              </div>
+              <span class="badge badge-violet" id="agent-status-badge-2">Running</span>
+            </div>
+            <div class="pipeline-steps" id="pipeline-2">
+              <div class="pipe-step running" id="ps2-0">
+                <div class="pipe-icon pi-running"><span class="spinner"></span></div>
+                <div class="pipe-label">Triggering AWS agent</div>
+                <div class="pipe-time" id="pt2-0">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps2-1">
+                <div class="pipe-icon pi-pending">2</div>
+                <div class="pipe-label">Loading Stage 1 impact report</div>
+                <div class="pipe-time" id="pt2-1">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps2-2">
+                <div class="pipe-icon pi-pending">3</div>
+                <div class="pipe-label">Parsing Integration Spec</div>
+                <div class="pipe-time" id="pt2-2">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps2-3">
+                <div class="pipe-icon pi-pending">4</div>
+                <div class="pipe-label">Mapping integration touchpoints</div>
+                <div class="pipe-time" id="pt2-3">—</div>
+              </div>
+              <div class="pipe-step pending" id="ps2-4">
+                <div class="pipe-icon pi-pending">5</div>
+                <div class="pipe-label">Generating final impact report</div>
+                <div class="pipe-time" id="pt2-4">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STAGE 2 REPORT -->
+          <div id="report-2" style="display:none">
+            <div class="kpi-strip">
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">8</div><div class="kpi-label">Broken Integrations</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--warn)">22</div><div class="kpi-label">Affected Flows</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">3</div><div class="kpi-label">Critical Failures</div></div>
+              <div class="kpi-card"><div class="kpi-val" style="color:var(--ok)">6</div><div class="kpi-label">Auto-Remediable</div></div>
+            </div>
+
+            <div class="report-card">
+              <div class="report-header" style="background:linear-gradient(135deg,#5b21b6,#7c3aed)">
+                <div>
+                  <div class="report-header-title">Stage 2 — Final Integration Impact Report</div>
+                  <div class="report-header-meta">Stage 1 Report · Integration Spec · Generated just now</div>
+                </div>
+                <button onclick="exportReport()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;"><i class="ti ti-download" style="vertical-align:-2px;margin-right:4px"></i>Export</button>
+              </div>
+              <div class="report-body">
+                <div class="tab-bar">
+                  <div class="tab active" onclick="switchReportTab(this,'rtab2-int')">Integration Impacts</div>
+                  <div class="tab" onclick="switchReportTab(this,'rtab2-flow')">Affected Flows</div>
+                  <div class="tab" onclick="switchReportTab(this,'rtab2-rem')">Remediation</div>
+                </div>
+
+                <div id="rtab2-int">
+                  <table class="impact-table">
+                    <thead><tr><th>Integration</th><th>Type</th><th>Affected Endpoints</th><th>Compatibility</th><th>Severity</th><th></th></tr></thead>
+                    <tbody>
+                      <tr class="clickable-section" onclick="askAbout2('SAP-SFDC sync integration breaks because RevenueYTD field changed type from Text to Currency')">
+                        <td><strong>SAP Revenue Sync</strong></td><td><span class="badge badge-gray">SAP ↔ SFDC</span></td><td>Account</td><td>Field type mismatch</td><td class="severity-high">CRITICAL</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout2('SAP Revenue Sync critical failure')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout2('Order Management integration uses OrderLineStatus Draft and Cancelled which are now deprecated')">
+                        <td><strong>Order Management</strong></td><td><span class="badge badge-gray">OMS ↔ SFDC</span></td><td>Order_Line__c</td><td>Picklist value missing</td><td class="severity-high">CRITICAL</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout2('Order Management integration failure due to deprecated picklist')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout2('Billing system reads Invoice Account lookup to sync invoices — lookup target now changed to ParentAccount')">
+                        <td><strong>Billing Sync</strong></td><td><span class="badge badge-gray">Billing ↔ SFDC</span></td><td>Invoice__c</td><td>Lookup target changed</td><td class="severity-high">CRITICAL</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout2('Billing Sync critical lookup change')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout2('Marketing platform stage sync will fail for records with Prospecting stage now removed')">
+                        <td><strong>Marketing Sync</strong></td><td><span class="badge badge-gray">Marketo ↔ SFDC</span></td><td>Opportunity</td><td>Missing picklist value</td><td class="severity-med">HIGH</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout2('Marketing Sync Opportunity stage issue')">Ask AI ›</button></td>
+                      </tr>
+                      <tr class="clickable-section" onclick="askAbout2('ERP product catalog integration needs mapping for 4 new Custom_Product fields')">
+                        <td><strong>ERP Product Catalog</strong></td><td><span class="badge badge-gray">ERP ↔ SFDC</span></td><td>Custom_Product__c</td><td>New fields unmapped</td><td class="severity-low">MEDIUM</td>
+                        <td><button class="row-ask" onclick="event.stopPropagation();askAbout2('ERP Product Catalog new field mapping')">Ask AI ›</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="rtab2-flow" style="display:none">
+                  <table class="impact-table">
+                    <thead><tr><th>Endpoint / Topic</th><th>Integration</th><th>Status</th><th>Description</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>Revenue Daily Batch</td><td>SAP Revenue Sync</td><td><span class="badge badge-red">Broken</span></td><td>Type mismatch on RevenueYTD</td><td><button class="row-ask" onclick="askAbout2('Revenue Daily Batch flow fix')">Ask AI ›</button></td></tr>
+                      <tr><td>Invoice Account Reconcile</td><td>Billing Sync</td><td><span class="badge badge-red">Broken</span></td><td>Lookup target changed</td><td><button class="row-ask" onclick="askAbout2('Invoice reconcile flow fix')">Ask AI ›</button></td></tr>
+                      <tr><td>Order Status Push</td><td>Order Management</td><td><span class="badge badge-red">Broken</span></td><td>Deprecated status values</td><td><button class="row-ask" onclick="askAbout2('Order Status Push flow fix')">Ask AI ›</button></td></tr>
+                      <tr><td>Opportunity Stage Mirror</td><td>Marketing Sync</td><td><span class="badge badge-amber">At Risk</span></td><td>StageName Prospecting removed</td><td><button class="row-ask" onclick="askAbout2('Opportunity Stage Mirror risk')">Ask AI ›</button></td></tr>
+                      <tr><td>Product Taxonomy Sync</td><td>ERP Product Catalog</td><td><span class="badge badge-amber">At Risk</span></td><td>4 new fields need mapping</td><td><button class="row-ask" onclick="askAbout2('Product Taxonomy mapping')">Ask AI ›</button></td></tr>
+                      <tr><td>Contact Email Validate</td><td>CRM Sync</td><td><span class="badge badge-green">Stable</span></td><td>Validation rule added, no break</td><td><button class="row-ask" onclick="askAbout2('Contact Email Validate stability')">Ask AI ›</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="rtab2-rem" style="display:none">
+                  <div id="rtab2-rem-inner" style="display:flex;flex-direction:column;gap:10px;">
+                    <div style="background:#fee2e2;border-radius:8px;padding:14px;border-left:4px solid var(--bad);">
+                      <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">Critical — SAP Revenue Sync</div>
+                      <div style="font-size:12px;color:var(--text);line-height:1.7;">Update SAP field mapping: cast <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">REVENUE_YTD</code> to Decimal before writing to <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">RevenueYTD__c</code>. Update transformation layer in SAP-SFDC middleware.</div>
+                      <button onclick="askAbout2('How exactly do I fix the SAP Revenue Sync type mismatch step by step?')" style="margin-top:8px;background:var(--bad);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">Ask AI for fix steps →</button>
+                    </div>
+                    <div style="background:#fee2e2;border-radius:8px;padding:14px;border-left:4px solid var(--bad);">
+                      <div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:6px;">Critical — Order Management</div>
+                      <div style="font-size:12px;color:var(--text);line-height:1.7;">Map deprecated values: <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">Draft → New</code>, <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">Cancelled → Voided</code> in the OMS-SFDC connector config.</div>
+                      <button onclick="askAbout2('How do I remap Draft and Cancelled order statuses in the OMS connector?')" style="margin-top:8px;background:var(--bad);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">Ask AI for fix steps →</button>
+                    </div>
+                    <div style="background:#fef3c7;border-radius:8px;padding:14px;border-left:4px solid var(--warn);">
+                      <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px;">High — Marketing Sync</div>
+                      <div style="font-size:12px;color:var(--text);line-height:1.7;">Add a null-check in the Marketo connector for <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">StageName = Prospecting</code> and route to <code style="background:#e2e8f0;padding:1px 4px;border-radius:3px;font-size:11px">Qualification</code> as fallback.</div>
+                      <button onclick="askAbout2('How to handle the Marketo Prospecting stage migration safely?')" style="margin-top:8px;background:var(--warn);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">Ask AI for fix steps →</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LLM ASSISTANT STAGE 2 -->
+            <div class="llm-panel">
+              <div class="llm-header">
+                <i class="ti ti-sparkles" style="color:var(--violet);font-size:16px"></i>
+                <div class="llm-header-title">AI Assistant — Ask about the final report</div>
+                <span class="badge badge-violet">GPT-4o</span>
+              </div>
+              <div class="llm-messages" id="llm-messages-2">
+                <div class="msg msg-ai">
+                  The final integration impact report is ready. I can explain any finding, walk you through remediation steps, or help you understand why a specific integration is affected. What do you need?
+                </div>
+              </div>
+              <div class="llm-input-row">
+                <input class="llm-input" id="llm-input-2" placeholder="e.g. Which integrations will break first if I deploy?" onkeydown="if(event.key==='Enter')sendLLM(2)"/>
+                <button class="llm-send" onclick="sendLLM(2)"><i class="ti ti-send"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /page-analyzer -->
+
+      <!-- RUN HISTORY PAGE -->
+      <div class="page" id="page-history">
+        <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div><h1>Run History</h1><p>All analysis runs in this session</p></div>
+          <button onclick="clearHistory()" title="Clear run history" style="display:flex;align-items:center;gap:5px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;margin-top:4px;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:14px"></i> Clear History</button>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+          <div style="display:grid;grid-template-columns:140px 1fr 100px 100px 80px;padding:8px 16px;background:var(--surface);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);gap:8px;">
+            <span>Date</span><span>Documents</span><span>Objects</span><span>Severity</span><span>Stage</span>
+          </div>
+          <div id="history-rows"></div>
+          <div id="history-empty" style="padding:32px;text-align:center;color:var(--faint);font-size:12px;">No runs yet — complete a Stage 1 analysis to see history here.</div>
+        </div>
+      </div>
+
+      <!-- AUDIT LOG PAGE -->
+      <div class="page" id="page-audit">
+        <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div><h1>Audit Log</h1><p>All agent runs and user actions in this session</p></div>
+          <button onclick="clearAudit()" title="Clear audit log" style="display:flex;align-items:center;gap:5px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;margin-top:4px;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:14px"></i> Clear Log</button>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+          <div style="display:grid;grid-template-columns:130px 90px 100px 1fr;padding:8px 16px;background:var(--surface);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);gap:8px;"><span>Time</span><span>Stage</span><span>Action</span><span>Detail</span></div>
+          <div id="audit-rows"></div>
+          <div id="audit-empty" style="padding:32px;text-align:center;color:var(--faint);font-size:12px;">No actions yet — upload a document to start.</div>
+        </div>
+      </div>
+
+    </div><!-- /main -->
+
+    <!-- INTEL PANE -->
+    <div class="intel-pane">
+      <div class="intel-title">Intel</div>
+      <div class="intel-card">
+        <div class="intel-card-title">Current run</div>
+        <div class="intel-card-sub" id="intel-run-status">No run started</div>
+        <span class="intel-tag" id="intel-run-tag" style="background:var(--surface);color:var(--muted);">Idle</span>
+      </div>
+      <div class="intel-card">
+        <div class="intel-card-title">Session</div>
+        <div class="intel-card-sub" id="intel-session" style="font-family:monospace;font-size:10px;word-break:break-all;">—</div>
+      </div>
+      <div class="intel-card">
+        <div class="intel-card-title">Stage 1</div>
+        <div class="intel-card-sub" id="intel-s1-detail">Not started</div>
+        <span class="intel-tag" id="intel-s1-tag" style="background:var(--surface);color:var(--muted);">—</span>
+      </div>
+      <div class="intel-card">
+        <div class="intel-card-title">Stage 2</div>
+        <div class="intel-card-sub" id="intel-s2-detail">Waiting for Stage 1</div>
+        <span class="intel-tag" id="intel-s2-tag" style="background:var(--surface);color:var(--muted);">—</span>
+      </div>
+      <div class="intel-card" id="intel-health-card" style="margin-top:14px;">
+        <div class="intel-card-title" style="color:var(--navy)">Backend</div>
+        <div class="intel-card-sub" id="intel-health-sub">Checking…</div>
+        <span class="intel-tag" id="intel-health-tag" style="background:var(--surface);color:var(--muted);">—</span>
+      </div>
+    </div>
+
+  </div><!-- /body -->
+</div><!-- /app -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const API = window.location.origin.startsWith('file:') ? 'http://localhost:8000' : '';
+let sessionId = null;
+let s1Done = false, s2Done = false;
+let currentStage = 1;
+const chatHistory = { 1: [], 2: [] };
+let selectedFiles = { 1: null, 2: null };
+const auditLog = [];       // [{time, stage, action, detail}]
+const runHistory = [];     // [{date, docs, objects, highCount, stagesDone}]
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('nav-' + name)?.classList.add('active');
+}
+
+function switchStage(n) {
+  if (n === 2 && !s1Done) return;
+  currentStage = n;
+  document.getElementById('stage-1-area').style.display = n === 1 ? 'block' : 'none';
+  document.getElementById('stage-2-area').style.display = n === 2 ? 'block' : 'none';
+  document.querySelectorAll('.stage-tab').forEach((t, i) => {
+    t.classList.remove('active', 'done', 'locked');
+    if (i + 1 === n) t.classList.add('active');
+    else if (i + 1 < n && s1Done) t.classList.add('done');
+    else if (i + 1 > n && !s1Done) t.classList.add('locked');
+  });
+}
+
+// ─── File handling ────────────────────────────────────────────────────────────
+function triggerFileInput(id) { document.getElementById(id).click(); }
+
+function onDragOver(e, dzId) { e.preventDefault(); document.getElementById(dzId).classList.add('dragging'); }
+function onDragLeave(dzId) { document.getElementById(dzId).classList.remove('dragging'); }
+function onDrop(e, dzId, fileId) {
+  e.preventDefault();
+  document.getElementById(dzId).classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f, fileId.replace('file', 'filelist'), dzId, fileId);
+}
+
+function onFileSelect(fileId, listId, dzId) {
+  const f = document.getElementById(fileId).files[0];
+  if (f) processFile(f, listId, dzId, fileId);
+}
+
+function processFile(file, listId, dzId, fileId) {
+  const stageNum = fileId.replace('file', '');
+  selectedFiles[parseInt(stageNum)] = file;
+  const sz = (file.size / 1024 / 1024).toFixed(1) + 'MB';
+  document.getElementById(listId).innerHTML = `
+    <div class="file-item">
+      <i class="ti ti-file-text"></i>
+      <span class="file-name">${file.name}</span>
+      <span class="file-size">${sz}</span>
+      <button class="file-remove" onclick="removeFile('${listId}','${fileId}','${stageNum}')"><i class="ti ti-x"></i></button>
+    </div>`;
+  enableRun(stageNum);
+}
+
+function removeFile(listId, fileId, stageNum) {
+  selectedFiles[parseInt(stageNum)] = null;
+  document.getElementById(listId).innerHTML = '';
+  document.getElementById(fileId).value = '';
+  document.getElementById('run-btn-' + stageNum).disabled = true;
+  document.getElementById('run-hint-' + stageNum).textContent = 'Upload a document to enable';
+}
+
+function enableRun(n) {
+  document.getElementById('run-btn-' + n).disabled = false;
+  document.getElementById('run-hint-' + n).textContent = 'Ready — click Run Agent';
+}
+
+// ─── Pipeline animation ───────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function pipeSetRunning(prefix, i) {
+  const el = document.getElementById(prefix + i);
+  if (!el) return;
+  el.className = 'pipe-step running';
+  el.querySelector('.pipe-icon').className = 'pipe-icon pi-running';
+  el.querySelector('.pipe-icon').innerHTML = '<span class="spinner"></span>';
+  document.getElementById(prefix.replace('ps', 'pt') + i).textContent = '—';
+}
+
+function pipeSetDone(prefix, i) {
+  const el = document.getElementById(prefix + i);
+  if (!el) return;
+  el.className = 'pipe-step done';
+  const ic = el.querySelector('.pipe-icon');
+  ic.className = 'pipe-icon pi-done';
+  ic.innerHTML = '<i class="ti ti-check" style="font-size:12px"></i>';
+  document.getElementById(prefix.replace('ps', 'pt') + i).textContent = 'Done';
+}
+
+// Runs steps 0..N-2 with a fixed delay each, then holds step N-1 in "running"
+// until apiPromise resolves. Returns the API result.
+async function runPipeline(prefix, totalSteps, apiPromise, stepMs = 2200) {
+  // Start the API call immediately (don't await yet)
+  let apiResult, apiError;
+  const wrapped = apiPromise
+    .then(r => { apiResult = r; })
+    .catch(e => { apiError = e; });
+
+  // Animate intermediate steps
+  for (let i = 0; i < totalSteps - 1; i++) {
+    pipeSetRunning(prefix, i);
+    await sleep(stepMs * 0.75);   // show spinner for 75% of step time
+    pipeSetDone(prefix, i);
+    await sleep(stepMs * 0.25);   // brief pause before next step
+  }
+
+  // Final step: show running and wait for real API to finish
+  pipeSetRunning(prefix, totalSteps - 1);
+  await wrapped;  // block until API actually resolves
+
+  if (apiError) throw apiError;
+  pipeSetDone(prefix, totalSteps - 1);
+  return apiResult;
+}
+
+// ─── Stage 1 ──────────────────────────────────────────────────────────────────
+async function runStage1() {
+  const file = selectedFiles[1];
+  if (!file) { alert('Please select a file first.'); return; }
+
+  document.getElementById('run-btn-1').disabled = true;
+  document.getElementById('upload-area-1').style.display = 'none';
+  document.getElementById('agent-status-1').style.display = 'block';
+  updateIntel('Stage 1 running…', 'Running', '#dbeafe', '#1d4ed8');
+
+  try {
+    // 1. Upload document
+    const uploadForm = new FormData();
+    uploadForm.append('file', file);
+    addAudit(null, 'UPLOAD', `${file.name} uploaded`);
+    const upRes = await fetch(`${API}/stage1/upload`, { method: 'POST', body: uploadForm });
+    if (!upRes.ok) throw new Error((await upRes.json()).detail || 'Upload failed');
+    const upData = await upRes.json();
+    sessionId = upData.session_id;
+    intelSetSession(sessionId);
+    intelSetStage1('Uploading + analyzing…', 'Running', '#dbeafe', '#1d4ed8');
+    addAudit(1, 'RUNNING', `Stage 1 agent triggered · ${file.name}`);
+
+    // 2. Animate pipeline steps sequentially; last step waits for real API response
+    const apiPromise = (async () => {
+      const runForm = new FormData();
+      runForm.append('session_id', sessionId);
+      const runRes = await fetch(`${API}/stage1/run`, { method: 'POST', body: runForm });
+      if (!runRes.ok) throw new Error((await runRes.json()).detail || 'Analysis failed');
+      return runRes.json();
+    })();
+
+    const runData = await runPipeline('ps1-', 5, apiPromise);
+    if (runData.status === 'failed') throw new Error(runData.report?.error || 'Analysis failed');
+
+    document.getElementById('agent-status-badge-1').textContent = 'Complete';
+    document.getElementById('agent-status-badge-1').style.background = '#d1fae5';
+    document.getElementById('agent-status-badge-1').style.color = '#065f46';
+
+    // 4. Render real report
+    renderStage1Report(runData.report);
+    document.getElementById('report-1').style.display = 'block';
+    s1Done = true;
+    const t2 = document.getElementById('stage-tab-2');
+    t2.classList.remove('locked');
+    document.getElementById('stagenum-2').className = 'stage-num sn-pending';
+
+    const objCount = runData.report?.impacted_objects?.length ?? 0;
+    const fieldCount = (runData.report?.impacted_objects || []).reduce((s, o) => s + (o.impacted_fields?.length ?? 0), 0);
+    const highCount = runData.report?.summary?.high_severity_count ?? 0;
+    updateIntel(`Stage 1 complete · ${objCount} objects`, 'Complete', '#d1fae5', '#065f46');
+    intelSetStage1(`${objCount} objects · ${fieldCount} fields`, 'Done', '#d1fae5', '#065f46');
+    intelSetStage2('Ready — upload Integration Spec', 'Unlocked', '#ede9fe', '#5b21b6');
+    addAudit(1, 'COMPLETE', `${objCount} objects · ${fieldCount} fields · ${highCount} HIGH severity`);
+    addRunHistory(file.name, objCount, highCount, 1);
+
+  } catch (err) {
+    showError('Stage 1 failed: ' + err.message);
+    document.getElementById('upload-area-1').style.display = 'block';
+    document.getElementById('agent-status-1').style.display = 'none';
+    document.getElementById('run-btn-1').disabled = false;
+    updateIntel('Stage 1 failed', 'Error', '#fee2e2', '#991b1b');
+    intelSetStage1('Failed: ' + err.message.substring(0, 40), 'Error', '#fee2e2', '#991b1b');
+    addAudit(1, 'ERROR', err.message.substring(0, 80));
+  }
+}
+
+function renderStage1Report(report) {
+  if (!report) return;
+  const s = report.summary || {};
+  const objects = report.impacted_objects || [];
+
+  // KPI strip
+  const totalFields = objects.reduce((sum, o) => sum + (o.impacted_fields?.length ?? 0), 0);
+  document.querySelector('#report-1 .kpi-strip').innerHTML = `
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">${objects.length}</div><div class="kpi-label">Impacted Objects</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--warn)">${totalFields}</div><div class="kpi-label">Impacted Fields</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">${s.high_severity_count ?? 0}</div><div class="kpi-label">High Severity</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--ok)">${s.low_severity_count ?? 0}</div><div class="kpi-label">Low Risk Changes</div></div>
+  `;
+
+  // Objects table
+  const sevClass = sev => sev === 'high' ? 'severity-high' : sev === 'medium' ? 'severity-med' : 'severity-low';
+  const sevLabel = sev => sev.toUpperCase();
+  document.querySelector('#rtab1-obj tbody').innerHTML = objects.map(obj => `
+    <tr class="clickable-section" onclick="askAboutRow(1, '${esc(obj.object_name)} — ${esc(obj.description)}')">
+      <td><strong>${esc(obj.object_name)}</strong></td>
+      <td><span class="badge badge-blue">${esc(obj.object_type)}</span></td>
+      <td>${obj.impacted_fields?.map(f => f.change_type).filter((v, i, a) => a.indexOf(v) === i).join(' / ') || '—'}</td>
+      <td class="${sevClass(obj.overall_severity)}">${sevLabel(obj.overall_severity)}</td>
+      <td>${obj.impacted_fields?.length ?? 0} fields</td>
+      <td><button class="row-ask" onclick="event.stopPropagation();askAboutRow(1,'${esc(obj.object_name)} impact details')">Ask AI ›</button></td>
+    </tr>
+  `).join('');
+
+  // Fields table
+  const allFields = objects.flatMap(o => (o.impacted_fields || []).map(f => ({ ...f, object_name: o.object_name })));
+  document.querySelector('#rtab1-fields tbody').innerHTML = allFields.map(f => `
+    <tr>
+      <td>${esc(f.object_name)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(f.field_name)}</td>
+      <td>${esc(f.change_type)}</td>
+      <td>${esc(f.old_definition ?? '—')}</td>
+      <td>${esc(f.new_definition ?? '—')}</td>
+      <td class="${sevClass(f.severity)}">${sevLabel(f.severity)}</td>
+      <td><button class="row-ask" onclick="askAboutRow(1,'${esc(f.object_name)}.${esc(f.field_name)} field change: ${esc(f.notes ?? '')}')">Ask AI ›</button></td>
+    </tr>
+  `).join('');
+
+  // Summary tab
+  const findings = (s.key_findings || []).map(f => `<li>${esc(f)}</li>`).join('');
+  document.getElementById('rtab1-summary').innerHTML = `
+    <div style="background:var(--surface);border-radius:8px;padding:16px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Executive Summary</div>
+      <p style="font-size:12px;line-height:1.8;color:var(--text);">
+        The analysis found <strong>${objects.length} impacted objects</strong> with <strong>${totalFields} field-level changes</strong>.
+        High severity items: <strong>${s.high_severity_count ?? 0}</strong>.
+      </p>
+      <ul style="margin-top:10px;font-size:12px;padding-left:18px;line-height:2;">${findings}</ul>
+    </div>
+  `;
+}
+
+// ─── Stage 2 ──────────────────────────────────────────────────────────────────
+async function runStage2() {
+  const file = selectedFiles[2];
+  if (!file) { alert('Please select a file first.'); return; }
+  if (!sessionId) { alert('Session missing. Please run Stage 1 first.'); return; }
+
+  document.getElementById('run-btn-2').disabled = true;
+  document.querySelector('#stage-2-area .upload-card').style.display = 'none';
+  document.getElementById('agent-status-2').style.display = 'block';
+  updateIntel('Stage 2 running…', 'Running', '#ede9fe', '#5b21b6');
+
+  try {
+    // 1. Upload integration spec
+    const uploadForm = new FormData();
+    uploadForm.append('file', file);
+    uploadForm.append('session_id', sessionId);
+    addAudit(2, 'UPLOAD', `${file.name} uploaded`);
+    const upRes = await fetch(`${API}/stage2/upload`, { method: 'POST', body: uploadForm });
+    if (!upRes.ok) throw new Error((await upRes.json()).detail || 'Upload failed');
+    addAudit(2, 'RUNNING', `Stage 2 agent triggered · ${file.name}`);
+
+    // 2. Animate pipeline sequentially; last step holds until API resolves
+    const apiPromise2 = (async () => {
+      const runForm = new FormData();
+      runForm.append('session_id', sessionId);
+      const runRes = await fetch(`${API}/stage2/run`, { method: 'POST', body: runForm });
+      if (!runRes.ok) throw new Error((await runRes.json()).detail || 'Analysis failed');
+      return runRes.json();
+    })();
+
+    const runData = await runPipeline('ps2-', 5, apiPromise2);
+    if (runData.status === 'failed') throw new Error(runData.report?.error || 'Analysis failed');
+
+    document.getElementById('agent-status-badge-2').textContent = 'Complete';
+    document.getElementById('agent-status-badge-2').style.background = '#d1fae5';
+    document.getElementById('agent-status-badge-2').style.color = '#065f46';
+
+    renderStage2Report(runData.report);
+    document.getElementById('report-2').style.display = 'block';
+    s2Done = true;
+    const intCount = runData.report?.integration_impacts?.length ?? 0;
+    const intHigh = runData.report?.summary?.high_severity_count ?? 0;
+    updateIntel('Both stages complete', 'Complete', '#d1fae5', '#065f46');
+    intelSetStage2(`${intCount} integrations impacted`, 'Done', '#d1fae5', '#065f46');
+    addAudit(2, 'COMPLETE', `${intCount} integrations · ${intHigh} HIGH severity · final report ready`);
+    // update run history entry: mark as 2/2
+    if (runHistory.length) { runHistory[0].stagesDone = 2; runHistory[0].docs += ' · ' + file.name; renderHistory(); }
+
+  } catch (err) {
+    showError('Stage 2 failed: ' + err.message);
+    document.querySelector('#stage-2-area .upload-card').style.display = 'block';
+    document.getElementById('agent-status-2').style.display = 'none';
+    document.getElementById('run-btn-2').disabled = false;
+    updateIntel('Stage 2 failed', 'Error', '#fee2e2', '#991b1b');
+    intelSetStage2('Failed: ' + err.message.substring(0, 40), 'Error', '#fee2e2', '#991b1b');
+    addAudit(2, 'ERROR', err.message.substring(0, 80));
+  }
+}
+
+function renderStage2Report(report) {
+  if (!report) return;
+  const s = report.summary || {};
+  const impacts = report.integration_impacts || [];
+  const migSteps = report.migration_steps || [];
+
+  const sevClass = sev => sev === 'high' ? 'severity-high' : sev === 'medium' ? 'severity-med' : 'severity-low';
+  const sevLabel = sev => sev.toUpperCase();
+
+  // KPI strip
+  const broken = impacts.filter(i => i.severity === 'high').length;
+  const autoRem = impacts.filter(i => i.backward_compatible).length;
+  document.querySelector('#report-2 .kpi-strip').innerHTML = `
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">${impacts.length}</div><div class="kpi-label">Impacted Integrations</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--warn)">${impacts.reduce((s,i)=>s+(i.affected_endpoints?.length??0),0)}</div><div class="kpi-label">Affected Endpoints</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">${broken}</div><div class="kpi-label">High Severity</div></div>
+    <div class="kpi-card"><div class="kpi-val" style="color:var(--ok)">${autoRem}</div><div class="kpi-label">Backward Compatible</div></div>
+  `;
+
+  // Integration Impacts table
+  document.querySelector('#rtab2-int tbody').innerHTML = impacts.map(imp => `
+    <tr class="clickable-section" onclick="askAboutRow(2, '${esc(imp.integration_name)} — ${esc(imp.description)}')">
+      <td><strong>${esc(imp.integration_name)}</strong></td>
+      <td><span class="badge badge-gray">${esc(imp.integration_type)}</span></td>
+      <td>${(imp.affected_endpoints || []).slice(0, 2).map(e => esc(e)).join(', ') || '—'}</td>
+      <td>${imp.backward_compatible ? '<span class="badge badge-green">Compatible</span>' : '<span class="badge badge-red">Breaking</span>'}</td>
+      <td class="${sevClass(imp.severity)}">${sevLabel(imp.severity)}</td>
+      <td><button class="row-ask" onclick="event.stopPropagation();askAboutRow(2,'${esc(imp.integration_name)} impact details')">Ask AI ›</button></td>
+    </tr>
+  `).join('');
+
+  // Flows tab — affected endpoints per integration
+  document.querySelector('#rtab2-flow tbody').innerHTML = impacts.flatMap(imp =>
+    (imp.affected_endpoints || ['(no specific endpoint)']).map(ep => `
+      <tr>
+        <td>${esc(ep)}</td>
+        <td>${esc(imp.integration_name)}</td>
+        <td>${imp.backward_compatible ? '<span class="badge badge-green">Stable</span>' : '<span class="badge badge-red">Breaking</span>'}</td>
+        <td>${esc(imp.description.substring(0, 80))}…</td>
+        <td><button class="row-ask" onclick="askAboutRow(2,'${esc(ep)} endpoint fix for ${esc(imp.integration_name)}')">Ask AI ›</button></td>
+      </tr>
+    `)
+  ).join('');
+
+  // Remediation tab
+  const colorMap = { high: 'var(--bad)', medium: 'var(--warn)', low: 'var(--ok)' };
+  const bgMap = { high: '#fee2e2', medium: '#fef3c7', low: '#d1fae5' };
+  document.getElementById('rtab2-rem-inner').innerHTML = [
+    ...impacts.map(imp => `
+      <div style="background:${bgMap[imp.severity]||'#f1f5f9'};border-radius:8px;padding:14px;border-left:4px solid ${colorMap[imp.severity]||'#94a3b8'};">
+        <div style="font-size:12px;font-weight:700;color:${colorMap[imp.severity]||'#64748b'};margin-bottom:6px;">${sevLabel(imp.severity)} — ${esc(imp.integration_name)}</div>
+        <div style="font-size:12px;color:var(--text);line-height:1.7;">${esc(imp.description)}</div>
+        <ul style="margin-top:8px;font-size:11px;padding-left:16px;line-height:1.9;">
+          ${(imp.recommended_changes || []).map(r => `<li>${esc(r)}</li>`).join('')}
+        </ul>
+        <button onclick="askAboutRow(2,'How do I fix ${esc(imp.integration_name)}? ${esc(imp.description)}')" style="margin-top:8px;background:${colorMap[imp.severity]||'#64748b'};color:white;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">Ask AI for fix steps →</button>
+      </div>
+    `),
+    migSteps.length ? `
+      <div style="background:var(--surface);border-radius:8px;padding:14px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Migration Steps</div>
+        <ol style="font-size:12px;padding-left:18px;line-height:2;">${migSteps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+      </div>
+    ` : ''
+  ].join('');
+}
+
+// ─── Chat / Q&A ───────────────────────────────────────────────────────────────
+function askAboutRow(stage, context) {
+  const q = 'Tell me about: ' + context.substring(0, 100);
+  addMessage(stage, 'user', q);
+  callChatAPI(stage, q);
+}
+
+function sendLLM(n) {
+  const input = document.getElementById('llm-input-' + n);
+  const val = input.value.trim();
+  if (!val) return;
+  addMessage(n, 'user', val);
+  input.value = '';
+  callChatAPI(n, val);
+}
+
+async function callChatAPI(stage, question) {
+  if (!sessionId) {
+    addMessage(stage, 'assistant', 'No analysis session found. Please run the analysis first.');
+    return;
+  }
+  const box = document.getElementById('llm-messages-' + stage);
+  const typing = document.createElement('div');
+  typing.className = 'msg msg-ai';
+  typing.innerHTML = '<span style="letter-spacing:2px;color:var(--faint)">● ● ●</span>';
+  box.appendChild(typing);
+  box.scrollTop = 9999;
+
+  try {
+    const body = JSON.stringify({
+      session_id: sessionId,
+      stage: stage,
+      question: question,
+      history: chatHistory[stage]
+    });
+    const res = await fetch(`${API}/chat/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Chat API error');
+    const data = await res.json();
+
+    chatHistory[stage].push({ role: 'user', content: question });
+    chatHistory[stage].push({ role: 'assistant', content: data.answer });
+
+    let html = esc(data.answer).replace(/\n/g, '<br>');
+    if (data.suggested_follow_ups?.length) {
+      html += '<div style="margin-top:10px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px;"><strong>Follow-up questions:</strong><br>';
+      html += data.suggested_follow_ups.map((q, i) =>
+        `<span style="cursor:pointer;color:var(--violet);" onclick="quickAsk(${stage},'${esc(q)}')">${i + 1}. ${esc(q)}</span>`
+      ).join('<br>');
+      html += '</div>';
+    }
+    typing.innerHTML = html;
+  } catch (err) {
+    typing.innerHTML = '<span style="color:var(--bad)">Error: ' + esc(err.message) + '</span>';
+  }
+  box.scrollTop = 9999;
+}
+
+function quickAsk(stage, question) {
+  addMessage(stage, 'user', question);
+  callChatAPI(stage, question);
+}
+
+function addMessage(n, role, text) {
+  const box = document.getElementById('llm-messages-' + n);
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + (role === 'user' ? 'user' : 'ai');
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = 9999;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function unlockStage2() { s1Done = true; switchStage(2); }
+
+function updateIntel(sub, tagLabel, tagBg, tagColor) {
+  document.getElementById('intel-run-status').textContent = sub;
+  const t = document.getElementById('intel-run-tag');
+  t.textContent = tagLabel;
+  t.style.background = tagBg;
+  t.style.color = tagColor;
+}
+
+function switchReportTab(el, tabId) {
+  const parent = el.closest('.report-body');
+  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  parent.querySelectorAll('[id^="rtab"]').forEach(t => t.style.display = 'none');
+  document.getElementById(tabId).style.display = 'block';
+}
+
+function showError(msg) {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:20px;right:20px;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 18px;font-size:12px;color:#991b1b;z-index:999;max-width:360px;';
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 6000);
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function exportReport() {
+  alert('Export feature: in production this calls a server-side PDF generation endpoint and downloads the file.');
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+async function resetAll() {
+
+  // Tell the backend to drop the session (best-effort — don't block UI on failure)
+  if (sessionId) {
+    fetch(`${API}/session/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  // ── Reset JS state ──────────────────────────────────────────────────────────
+  sessionId = null;
+  s1Done = false;
+  s2Done = false;
+  currentStage = 1;
+  chatHistory[1] = [];
+  chatHistory[2] = [];
+  selectedFiles[1] = null;
+  selectedFiles[2] = null;
+  // ── Reset stage tabs ────────────────────────────────────────────────────────
+  document.getElementById('stage-tab-1').className = 'stage-tab active';
+  document.getElementById('stagenum-1').className = 'stage-num sn-active';
+  document.getElementById('stage-tab-2').className = 'stage-tab locked';
+  document.getElementById('stagenum-2').className = 'stage-num sn-pending';
+
+  // ── Reset Stage 1 area ──────────────────────────────────────────────────────
+  document.getElementById('stage-1-area').style.display = 'block';
+  document.getElementById('stage-2-area').style.display = 'none';
+
+  document.getElementById('upload-area-1').style.display = 'block';
+  document.getElementById('agent-status-1').style.display = 'none';
+  document.getElementById('report-1').style.display = 'none';
+
+  // Reset pipeline steps to pending
+  for (let i = 0; i < 5; i++) {
+    const el = document.getElementById('ps1-' + i);
+    if (el) {
+      el.className = 'pipe-step pending';
+      el.querySelector('.pipe-icon').className = 'pipe-icon pi-pending';
+      el.querySelector('.pipe-icon').innerHTML = String(i + 1);
+    }
+    const pt = document.getElementById('pt1-' + i);
+    if (pt) pt.textContent = '—';
+  }
+  const badge1 = document.getElementById('agent-status-badge-1');
+  badge1.textContent = 'Running';
+  badge1.style.background = '';
+  badge1.style.color = '';
+
+  // Reset file input & list
+  document.getElementById('file1').value = '';
+  document.getElementById('filelist1').innerHTML = '';
+  document.getElementById('run-btn-1').disabled = true;
+  document.getElementById('run-hint-1').textContent = 'Upload a document to enable';
+
+  // ── Reset Stage 2 area ──────────────────────────────────────────────────────
+  document.querySelector('#stage-2-area .upload-card').style.display = 'block';
+  document.getElementById('agent-status-2').style.display = 'none';
+  document.getElementById('report-2').style.display = 'none';
+
+  for (let i = 0; i < 5; i++) {
+    const el = document.getElementById('ps2-' + i);
+    if (el) {
+      el.className = 'pipe-step pending';
+      el.querySelector('.pipe-icon').className = 'pipe-icon pi-pending';
+      el.querySelector('.pipe-icon').innerHTML = String(i + 1);
+    }
+    const pt = document.getElementById('pt2-' + i);
+    if (pt) pt.textContent = '—';
+  }
+  const badge2 = document.getElementById('agent-status-badge-2');
+  badge2.textContent = 'Running';
+  badge2.style.background = '';
+  badge2.style.color = '';
+
+  document.getElementById('file2').value = '';
+  document.getElementById('filelist2').innerHTML = '';
+  document.getElementById('run-btn-2').disabled = true;
+  document.getElementById('run-hint-2').textContent = 'Upload Integration Spec to enable';
+
+  // ── Reset chat panels ───────────────────────────────────────────────────────
+  document.getElementById('llm-messages-1').innerHTML = `
+    <div class="msg msg-ai">
+      Hi! I've analyzed the Stage 1 impact report. You can <strong>click any row</strong> in the tables above to ask me about it, or type your question below. What would you like to understand?
+    </div>`;
+  document.getElementById('llm-messages-2').innerHTML = `
+    <div class="msg msg-ai">
+      The final integration impact report is ready. I can explain any finding, walk you through remediation steps, or help you understand why a specific integration is affected. What do you need?
+    </div>`;
+  document.getElementById('llm-input-1').value = '';
+  document.getElementById('llm-input-2').value = '';
+
+  // ── Reset Intel pane ────────────────────────────────────────────────────────
+  updateIntel('No run started', 'Idle', 'var(--surface)', 'var(--muted)');
+  intelSetSession(null);
+  intelSetStage1('Not started', '—', 'var(--surface)', 'var(--muted)');
+  intelSetStage2('Waiting for Stage 1', '—', 'var(--surface)', 'var(--muted)');
+
+  // ── Navigate back to analyzer ───────────────────────────────────────────────
+  showPage('analyzer');
+}
+
+// ─── Intel pane helpers ───────────────────────────────────────────────────────
+function intelSetSession(sid) {
+  document.getElementById('intel-session').textContent = sid ? sid.substring(0, 18) + '…' : '—';
+}
+
+function intelSetStage1(detail, tagLabel, tagBg, tagColor) {
+  document.getElementById('intel-s1-detail').textContent = detail;
+  const t = document.getElementById('intel-s1-tag');
+  t.textContent = tagLabel;
+  t.style.background = tagBg;
+  t.style.color = tagColor;
+}
+
+function intelSetStage2(detail, tagLabel, tagBg, tagColor) {
+  document.getElementById('intel-s2-detail').textContent = detail;
+  const t = document.getElementById('intel-s2-tag');
+  t.textContent = tagLabel;
+  t.style.background = tagBg;
+  t.style.color = tagColor;
+}
+
+// ─── Audit log & run history ──────────────────────────────────────────────────
+function nowStr() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function addAudit(stage, action, detail) {
+  auditLog.unshift({ time: nowStr(), stage, action, detail });
+  renderAudit();
+}
+
+function renderAudit() {
+  const rows = document.getElementById('audit-rows');
+  const empty = document.getElementById('audit-empty');
+  if (!auditLog.length) { empty.style.display = 'block'; rows.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  const stageBadge = s => s === 1 ? '<span class="badge badge-blue">Stage 1</span>'
+                        : s === 2 ? '<span class="badge badge-violet">Stage 2</span>'
+                        : '<span class="badge badge-gray">—</span>';
+  const actionBadge = a => {
+    if (a === 'COMPLETE') return '<span class="badge badge-green">COMPLETE</span>';
+    if (a === 'ERROR')    return '<span class="badge badge-red">ERROR</span>';
+    if (a === 'RUNNING')  return '<span class="badge badge-blue">RUNNING</span>';
+    if (a === 'UPLOAD')   return '<span class="badge badge-gray">UPLOAD</span>';
+    return `<span class="badge badge-gray">${esc(a)}</span>`;
+  };
+  rows.innerHTML = auditLog.map(e => `
+    <div style="display:grid;grid-template-columns:130px 90px 100px 1fr;padding:10px 16px;border-top:1px solid var(--border);font-size:12px;gap:8px;align-items:center;">
+      <span style="color:var(--muted)">${esc(e.time)}</span>
+      <span>${stageBadge(e.stage)}</span>
+      <span>${actionBadge(e.action)}</span>
+      <span>${esc(e.detail)}</span>
+    </div>`).join('');
+}
+
+function addRunHistory(docs, objCount, highCount, stagesDone) {
+  runHistory.unshift({ date: nowStr(), docs, objCount, highCount, stagesDone });
+  renderHistory();
+}
+
+function renderHistory() {
+  const rows = document.getElementById('history-rows');
+  const empty = document.getElementById('history-empty');
+  if (!runHistory.length) { empty.style.display = 'block'; rows.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  rows.innerHTML = runHistory.map(r => {
+    const objBadge = r.objCount > 0
+      ? (r.highCount > 2 ? `<span class="badge badge-red">${r.objCount} objects</span>`
+                         : `<span class="badge badge-amber">${r.objCount} objects</span>`)
+      : '<span class="badge badge-green">0 objects</span>';
+    const sevBadge = r.highCount > 0
+      ? `<span class="badge badge-red">${r.highCount} HIGH</span>`
+      : '<span class="badge badge-green">0 HIGH</span>';
+    const stageBadge = r.stagesDone === 2
+      ? '<span class="badge badge-violet">2 / 2</span>'
+      : '<span class="badge badge-blue">1 / 2</span>';
+    return `
+      <div style="display:grid;grid-template-columns:140px 1fr 100px 100px 80px;padding:11px 16px;border-top:1px solid var(--border);font-size:12px;gap:8px;align-items:center;">
+        <span style="color:var(--muted)">Today ${esc(r.date)}</span>
+        <span>${esc(r.docs)}</span>
+        <span>${objBadge}</span>
+        <span>${sevBadge}</span>
+        <span>${stageBadge}</span>
+      </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  runHistory.length = 0;
+  renderHistory();
+}
+
+function clearAudit() {
+  auditLog.length = 0;
+  renderAudit();
+}
+
+// Poll /health on load and every 30s
+async function pollHealth() {
+  try {
+    const res = await fetch(`${API}/health`);
+    const data = await res.json();
+    const ok = data.status === 'healthy';
+    document.getElementById('intel-health-sub').textContent =
+      `API: ${data.checks.anthropic_api_key ? '✓' : '✗ no key'}  AWS: ${data.checks.aws_s3_configured ? '✓' : 'placeholder'}`;
+    const tag = document.getElementById('intel-health-tag');
+    tag.textContent = ok ? 'Healthy' : 'Degraded';
+    tag.style.background = ok ? '#d1fae5' : '#fef3c7';
+    tag.style.color = ok ? '#065f46' : '#92400e';
+  } catch {
+    document.getElementById('intel-health-sub').textContent = 'Cannot reach backend';
+    const tag = document.getElementById('intel-health-tag');
+    tag.textContent = 'Offline';
+    tag.style.background = '#fee2e2';
+    tag.style.color = '#991b1b';
+  }
+}
+pollHealth();
+setInterval(pollHealth, 30000);
+</script>
+</body>
+</html>
