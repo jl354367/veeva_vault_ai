@@ -22,10 +22,8 @@ from models.schemas import (
     ImpactedField,
     ImpactedObject,
     ImpactSeverity,
-    IntegrationImpact,
     SessionState,
     Stage1Report,
-    Stage2Report,
 )
 from services import aws_service, document_parser, llm_service
 
@@ -134,85 +132,6 @@ async def run_stage1(session_id: str) -> Stage1Report:
     return report
 
 
-# ─── Stage 2 ──────────────────────────────────────────────────────────────────
-
-async def run_stage2(session_id: str) -> Stage2Report:
-    """
-    Full Stage 2 pipeline:
-    1. Validate Stage 1 report exists in session.
-    2. Load uploaded integration specification document.
-    3. Optionally trigger AWS agent (placeholder).
-    4. Run local LLM analysis.
-    5. Parse result → Stage2Report, persist in session.
-    """
-    session = get_session(session_id)
-
-    stage1_report = session.stage1_report
-    if not stage1_report or stage1_report.status != AnalysisStatus.COMPLETED:
-        raise ValueError("Stage 1 must be completed before running Stage 2.")
-
-    doc_path = session.uploaded_files.get("integration_spec_doc")
-    if not doc_path:
-        raise ValueError("No integration specification document found. Upload a file first.")
-
-    doc_name = session.metadata.get("integration_spec_doc_name", "unknown")
-
-    report = Stage2Report(
-        session_id=session_id,
-        status=AnalysisStatus.RUNNING,
-        integration_spec_doc_name=doc_name,
-        stage1_report_ref=stage1_report.session_id,
-    )
-    session.stage2_report = report
-
-    try:
-        # Step 1: parse document
-        logger.info("[%s] Parsing integration spec document", session_id)
-        spec_text = document_parser.extract_text(doc_path)
-        if not spec_text:
-            raise ValueError("Extracted integration spec text is empty.")
-
-        # Step 2: trigger AWS agent (placeholder)
-        logger.info("[%s] Triggering AWS agent (placeholder)", session_id)
-        agent_result = await aws_service.trigger_aws_agent(
-            payload={
-                "session_id": session_id,
-                "stage": 2,
-                "doc_name": doc_name,
-                "stage1_summary": stage1_report.summary.model_dump() if stage1_report.summary else {},
-            },
-            stage=2,
-        )
-        logger.info("[%s] AWS agent response: %s", session_id, agent_result.get("status"))
-
-        # Step 3: LLM analysis
-        logger.info("[%s] Running LLM analysis for Stage 2", session_id)
-        analysis = await llm_service.run_stage2_analysis(spec_text, stage1_report)
-
-        # Step 4: build typed report
-        report.raw_llm_analysis = json.dumps(analysis)
-        report.summary = _build_summary(analysis.get("summary", {}))
-        report.integration_impacts = _build_integration_impacts(
-            analysis.get("integration_impacts", [])
-        )
-        report.migration_steps = analysis.get("migration_steps", [])
-        report.status = AnalysisStatus.COMPLETED
-
-        logger.info(
-            "[%s] Stage 2 complete — %d integrations impacted",
-            session_id,
-            len(report.integration_impacts),
-        )
-    except Exception as exc:
-        logger.error("[%s] Stage 2 failed: %s", session_id, exc)
-        report.status = AnalysisStatus.FAILED
-        report.error = str(exc)
-        raise
-
-    session.stage2_report = report
-    return report
-
-
 # ─── Data builders ────────────────────────────────────────────────────────────
 
 def _build_summary(raw: dict[str, Any]) -> AnalysisSummary:
@@ -252,19 +171,3 @@ def _build_impacted_objects(raw_list: list[dict[str, Any]]) -> list[ImpactedObje
     return objects
 
 
-def _build_integration_impacts(raw_list: list[dict[str, Any]]) -> list[IntegrationImpact]:
-    impacts = []
-    for raw in raw_list:
-        impacts.append(
-            IntegrationImpact(
-                integration_name=raw.get("integration_name", ""),
-                integration_type=raw.get("integration_type", ""),
-                affected_endpoints=raw.get("affected_endpoints", []),
-                affected_fields=raw.get("affected_fields", []),
-                severity=ImpactSeverity(raw.get("severity", "medium").lower()),
-                description=raw.get("description", ""),
-                recommended_changes=raw.get("recommended_changes", []),
-                backward_compatible=raw.get("backward_compatible", False),
-            )
-        )
-    return impacts

@@ -65,36 +65,6 @@ async def fetch_config_report_from_s3(
         raise
 
 
-async def upload_report_to_s3(
-    report_data: dict[str, Any],
-    bucket: str,
-    key: str,
-) -> str:
-    """
-    Upload a generated report JSON to S3.  Returns the S3 URI.
-    Falls back to a no-op when AWS is not configured.
-    """
-    if not _is_aws_configured():
-        logger.warning("AWS not configured — skipping S3 upload")
-        return f"mock://s3/{bucket}/{key}"
-
-    try:
-        # ── PLACEHOLDER ───────────────────────────────────────────────────────
-        # s3 = _boto_client("s3")
-        # s3.put_object(
-        #     Bucket=bucket,
-        #     Key=key,
-        #     Body=json.dumps(report_data, default=str).encode(),
-        #     ContentType="application/json",
-        # )
-        # return f"s3://{bucket}/{key}"
-        # ── END PLACEHOLDER ───────────────────────────────────────────────────
-        return f"mock://s3/{bucket}/{key}"
-    except Exception as exc:
-        logger.error("Failed to upload report to S3: %s", exc)
-        raise
-
-
 # ─── Lambda / Bedrock Agent ───────────────────────────────────────────────────
 
 async def trigger_aws_agent(

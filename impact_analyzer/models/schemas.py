@@ -65,74 +65,11 @@ class Stage1Report(BaseModel):
     error: Optional[str] = None
 
 
-class Stage1RunRequest(BaseModel):
-    session_id: Optional[str] = None
-
-
 class Stage1RunResponse(BaseModel):
     session_id: str
     status: AnalysisStatus
     message: str
     report: Optional[Stage1Report] = None
-
-
-# ─── Stage 2 ──────────────────────────────────────────────────────────────────
-
-class IntegrationImpact(BaseModel):
-    integration_name: str
-    integration_type: str = Field(
-        description="e.g. REST API, Event, Batch Job, Message Queue"
-    )
-    affected_endpoints: list[str] = []
-    affected_fields: list[str] = []
-    severity: ImpactSeverity
-    description: str
-    recommended_changes: list[str] = []
-    backward_compatible: bool = False
-
-
-class Stage2Report(BaseModel):
-    session_id: str
-    status: AnalysisStatus
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    integration_spec_doc_name: str
-    stage1_report_ref: str = Field(description="session_id of the Stage 1 report used")
-    summary: Optional[AnalysisSummary] = None
-    integration_impacts: list[IntegrationImpact] = []
-    migration_steps: list[str] = []
-    raw_llm_analysis: Optional[str] = None
-    error: Optional[str] = None
-
-
-class Stage2RunRequest(BaseModel):
-    session_id: str = Field(description="session_id from Stage 1")
-
-
-class Stage2RunResponse(BaseModel):
-    session_id: str
-    status: AnalysisStatus
-    message: str
-    report: Optional[Stage2Report] = None
-
-
-# ─── Chat / Q&A ───────────────────────────────────────────────────────────────
-
-class ChatMessage(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant)$")
-    content: str
-
-
-class ChatRequest(BaseModel):
-    session_id: str
-    stage: int = Field(..., ge=1, le=2, description="1 = Stage 1 report, 2 = Stage 2 report")
-    question: str
-    history: list[ChatMessage] = []
-
-
-class ChatResponse(BaseModel):
-    session_id: str
-    answer: str
-    suggested_follow_ups: list[str] = []
 
 
 # ─── Session state (in-memory store shape) ────────────────────────────────────
@@ -141,7 +78,6 @@ class SessionState(BaseModel):
     session_id: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     stage1_report: Optional[Stage1Report] = None
-    stage2_report: Optional[Stage2Report] = None
     uploaded_files: dict[str, str] = Field(
         default_factory=dict,
         description="label -> local file path"

@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from config import settings
-from routers import chat, stage1, stage2
+from routers import stage1, stage2
 from services import analysis_service
 from utils.file_utils import delete_session_files
 
@@ -88,7 +88,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(stage1.router)
 app.include_router(stage2.router)
-app.include_router(chat.router)
 
 
 # ─── Health / root ────────────────────────────────────────────────────────────

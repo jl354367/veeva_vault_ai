@@ -20,8 +20,6 @@ body{font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--
 .logo-dot{width:10px;height:10px;background:linear-gradient(135deg,var(--navy),var(--violet));border-radius:50%;}
 .topbar-right{display:flex;align-items:center;gap:14px;}
 .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--violet));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;cursor:pointer;}
-.notif-btn{position:relative;width:32px;height:32px;border-radius:50%;background:var(--surface);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);}
-.notif-dot{width:7px;height:7px;background:var(--bad);border-radius:50%;position:absolute;top:5px;right:5px;border:1.5px solid white;}
 .body{display:flex;flex:1;overflow:hidden;}
 /* ===== SIDEBAR ===== */
 .sidebar{width:220px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
@@ -58,8 +56,6 @@ body{font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--
 .stage-info{flex:1;}
 .stage-name{font-size:13px;font-weight:700;color:var(--text);}
 .stage-desc{font-size:11px;color:var(--muted);margin-top:2px;}
-.stage-arrow{font-size:18px;color:var(--border);padding:0 8px;flex-shrink:0;}
-.stage-arrow:last-of-type{display:none;}
 /* upload area */
 .upload-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
 .upload-card-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:8px;}
@@ -491,7 +487,6 @@ async function resetAll() {
   s1Done = false;
   currentStage = 1;
   selectedFiles[1] = null;
-  selectedFiles[2] = null;
   // ── Reset stage tabs ────────────────────────────────────────────────────────
   document.getElementById('stage-tab-1').className = 'stage-tab active';
   document.getElementById('stagenum-1').className = 'stage-num sn-active';
@@ -578,11 +573,6 @@ function renderAudit() {
       <span>${actionBadge(e.action)}</span>
       <span>${esc(e.detail)}</span>
     </div>`).join('');
-}
-
-function addRunHistory(docs, objCount, highCount, stagesDone) {
-  runHistory.unshift({ date: nowStr(), docs, objCount, highCount, stagesDone });
-  renderHistory();
 }
 
 function renderHistory() {
