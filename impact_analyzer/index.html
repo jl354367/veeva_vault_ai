@@ -126,7 +126,8 @@ body{font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--
 .llm-panel{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
 .llm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface);}
 .llm-header-title{font-size:13px;font-weight:700;flex:1;}
-.llm-messages{padding:14px;max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.llm-messages{padding:0;max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.llm-messages:not(:empty){padding:14px;}
 .msg{max-width:85%;padding:10px 14px;border-radius:10px;font-size:12px;line-height:1.6;}
 .msg-user{background:var(--navy);color:white;align-self:flex-end;border-bottom-right-radius:3px;}
 .msg-ai{background:var(--surface);color:var(--text);align-self:flex-start;border-bottom-left-radius:3px;border:1px solid var(--border);}
@@ -266,9 +267,8 @@ tr:hover .row-ask{display:inline;}
               <div class="llm-header">
                 <i class="ti ti-message" style="color:var(--navy);font-size:16px"></i>
                 <div class="llm-header-title">Stage 1 — Analysis Chat</div>
-                <span class="badge badge-gray">Skeleton</span>
               </div>
-              <div class="llm-messages" id="chat-messages-1" style="min-height:120px;"></div>
+              <div class="llm-messages" id="chat-messages-1" style="padding:0;"></div>
               <div class="llm-input-row">
                 <input class="llm-input" id="chat-input-1" placeholder="e.g. Analyse this document, compare with another..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitChat1();}"/>
                 <button class="llm-send" onclick="submitChat1()">Submit</button>
