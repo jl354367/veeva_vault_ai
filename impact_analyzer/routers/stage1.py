@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Body
 from fastapi.responses import JSONResponse
 
 from models.schemas import (
@@ -140,6 +140,19 @@ async def get_stage1_status(session_id: str):
 
 
 # ─── Report ───────────────────────────────────────────────────────────────────
+
+@router.post("/chat", summary="Stage 1 Chat — skeleton placeholder")
+async def stage1_chat(
+    session_id: str = Form(...),
+    message: str = Form(...),
+):
+    """Skeleton endpoint. Returns a placeholder string until LLM is wired in."""
+    return {
+        "session_id": session_id,
+        "message": message,
+        "response": "Placeholder response — LLM will be connected here in the next iteration.",
+    }
+
 
 @router.get("/report/{session_id}", response_model=Stage1Report, summary="Get Stage 1 Report")
 async def get_stage1_report(session_id: str):

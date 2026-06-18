@@ -250,52 +250,33 @@ tr:hover .row-ask{display:inline;}
             <input type="file" id="file1" style="display:none" accept=".pdf,.docx,.xlsx" onchange="onFileSelect('file1','filelist1','dz1')"/>
             <div class="file-list" id="filelist1"></div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
-              <button class="run-btn" id="run-btn-1" disabled onclick="runStage1()">
-                <i class="ti ti-player-play"></i> Run Agent
+              <button class="run-btn" id="upload-btn-1" disabled onclick="uploadFile1()">
+                <i class="ti ti-upload"></i> Upload
               </button>
-              <span id="run-hint-1" style="font-size:11px;color:var(--muted);">Upload a document to enable</span>
+              <span id="upload-hint-1" style="font-size:11px;color:var(--muted);">Select a document to enable</span>
+            </div>
+            <div id="upload-success-1" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:var(--ok);">
+              <i class="ti ti-check-circle"></i> <span id="upload-success-text-1"></span>
             </div>
           </div>
 
-          <!-- AGENT STATUS (hidden until run) -->
-          <div class="agent-status" id="agent-status-1" style="display:none">
-            <div class="agent-status-header">
-              <div class="agent-status-title">
-                <i class="ti ti-cpu" style="color:var(--navy);vertical-align:-2px;margin-right:6px"></i>
-                AWS Agent · Stage 1
+          <!-- CHAT BOX (shown after upload) -->
+          <div id="chat-area-1" style="display:none">
+            <div class="llm-panel">
+              <div class="llm-header">
+                <i class="ti ti-message" style="color:var(--navy);font-size:16px"></i>
+                <div class="llm-header-title">Stage 1 — Analysis Chat</div>
+                <span class="badge badge-gray">Skeleton</span>
               </div>
-              <span class="badge badge-blue" id="agent-status-badge-1">Running</span>
-            </div>
-            <div class="pipeline-steps" id="pipeline-1">
-              <div class="pipe-step running" id="ps1-0">
-                <div class="pipe-icon pi-running"><span class="spinner" style="border-top-color:white"></span></div>
-                <div class="pipe-label">Triggering AWS agent</div>
-                <div class="pipe-time" id="pt1-0">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps1-1">
-                <div class="pipe-icon pi-pending">2</div>
-                <div class="pipe-label">Fetching Config Report from S3</div>
-                <div class="pipe-time" id="pt1-1">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps1-2">
-                <div class="pipe-icon pi-pending">3</div>
-                <div class="pipe-label">Analyzing impacted objects</div>
-                <div class="pipe-time" id="pt1-2">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps1-3">
-                <div class="pipe-icon pi-pending">4</div>
-                <div class="pipe-label">Identifying impacted fields</div>
-                <div class="pipe-time" id="pt1-3">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps1-4">
-                <div class="pipe-icon pi-pending">5</div>
-                <div class="pipe-label">Generating impact report</div>
-                <div class="pipe-time" id="pt1-4">—</div>
+              <div class="llm-messages" id="chat-messages-1" style="min-height:120px;"></div>
+              <div class="llm-input-row">
+                <input class="llm-input" id="chat-input-1" placeholder="e.g. Analyse this document, compare with another..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitChat1();}"/>
+                <button class="llm-send" onclick="submitChat1()">Submit</button>
               </div>
             </div>
           </div>
 
-          <!-- STAGE 1 REPORT (hidden until done) -->
+          <!-- STAGE 1 REPORT placeholder (wired up later) -->
           <div id="report-1" style="display:none">
             <div class="kpi-strip">
               <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">14</div><div class="kpi-label">Impacted Objects</div></div>
@@ -422,74 +403,13 @@ tr:hover .row-ask{display:inline;}
         <!-- STAGE 2 -->
         <div id="stage-2-area" style="display:none">
 
-          <div class="upload-card">
-            <div class="upload-card-title">
-              <i class="ti ti-file-code" style="color:var(--violet)"></i>
-              Integration Specification Document
-              <span class="badge badge-violet">Stage 2</span>
-            </div>
-            <div class="upload-card-sub">
-              Upload the Integration Specification. The agent will combine it with the Stage 1 report to produce a final integration impact report.
-            </div>
-            <!-- Stage 1 report chip -->
-            <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ok);">
-              <i class="ti ti-check-circle" style="font-size:14px"></i>
-              <strong>Stage 1 report loaded</strong> &nbsp;·&nbsp; 14 objects · 37 fields · ready for integration analysis
-            </div>
-            <div class="dropzone" id="dz2" onclick="triggerFileInput('file2')" ondragover="onDragOver(event,'dz2')" ondragleave="onDragLeave('dz2')" ondrop="onDrop(event,'dz2','file2')">
-              <i class="ti ti-cloud-upload"></i>
-              <div class="dz-title">Drag &amp; drop or click to browse</div>
-              <div class="dz-sub">PDF, DOCX, XLSX · max 50MB</div>
-            </div>
-            <input type="file" id="file2" style="display:none" accept=".pdf,.docx,.xlsx" onchange="onFileSelect('file2','filelist2','dz2')"/>
-            <div class="file-list" id="filelist2"></div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
-              <button class="run-btn" id="run-btn-2" disabled onclick="runStage2()">
-                <i class="ti ti-player-play"></i> Run Agent
-              </button>
-              <span id="run-hint-2" style="font-size:11px;color:var(--muted);">Upload Integration Spec to enable</span>
-            </div>
+          <!-- STAGE 2 PLACEHOLDER -->
+          <div class="upload-card" style="text-align:center;padding:52px 24px;">
+            <i class="ti ti-clock" style="font-size:44px;color:var(--faint);display:block;margin-bottom:16px;"></i>
+            <div style="font-size:16px;font-weight:700;color:var(--muted);margin-bottom:8px;">Stage 2 — Coming Soon</div>
+            <div style="font-size:12px;color:var(--faint);">Integration Impact analysis will be available in a future release.</div>
           </div>
 
-          <!-- AGENT STATUS 2 -->
-          <div class="agent-status" id="agent-status-2" style="display:none">
-            <div class="agent-status-header">
-              <div class="agent-status-title">
-                <i class="ti ti-cpu" style="color:var(--violet);vertical-align:-2px;margin-right:6px"></i>
-                AWS Agent · Stage 2
-              </div>
-              <span class="badge badge-violet" id="agent-status-badge-2">Running</span>
-            </div>
-            <div class="pipeline-steps" id="pipeline-2">
-              <div class="pipe-step running" id="ps2-0">
-                <div class="pipe-icon pi-running"><span class="spinner"></span></div>
-                <div class="pipe-label">Triggering AWS agent</div>
-                <div class="pipe-time" id="pt2-0">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps2-1">
-                <div class="pipe-icon pi-pending">2</div>
-                <div class="pipe-label">Loading Stage 1 impact report</div>
-                <div class="pipe-time" id="pt2-1">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps2-2">
-                <div class="pipe-icon pi-pending">3</div>
-                <div class="pipe-label">Parsing Integration Spec</div>
-                <div class="pipe-time" id="pt2-2">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps2-3">
-                <div class="pipe-icon pi-pending">4</div>
-                <div class="pipe-label">Mapping integration touchpoints</div>
-                <div class="pipe-time" id="pt2-3">—</div>
-              </div>
-              <div class="pipe-step pending" id="ps2-4">
-                <div class="pipe-icon pi-pending">5</div>
-                <div class="pipe-label">Generating final impact report</div>
-                <div class="pipe-time" id="pt2-4">—</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STAGE 2 REPORT -->
           <div id="report-2" style="display:none">
             <div class="kpi-strip">
               <div class="kpi-card"><div class="kpi-val" style="color:var(--bad)">8</div><div class="kpi-label">Broken Integrations</div></div>
@@ -728,13 +648,17 @@ function removeFile(listId, fileId, stageNum) {
   selectedFiles[parseInt(stageNum)] = null;
   document.getElementById(listId).innerHTML = '';
   document.getElementById(fileId).value = '';
-  document.getElementById('run-btn-' + stageNum).disabled = true;
-  document.getElementById('run-hint-' + stageNum).textContent = 'Upload a document to enable';
+  const btn = document.getElementById('upload-btn-' + stageNum) || document.getElementById('run-btn-' + stageNum);
+  if (btn) btn.disabled = true;
+  const hint = document.getElementById('upload-hint-' + stageNum) || document.getElementById('run-hint-' + stageNum);
+  if (hint) hint.textContent = 'Select a document to enable';
 }
 
 function enableRun(n) {
-  document.getElementById('run-btn-' + n).disabled = false;
-  document.getElementById('run-hint-' + n).textContent = 'Ready — click Run Agent';
+  const btn = document.getElementById('upload-btn-' + n) || document.getElementById('run-btn-' + n);
+  if (btn) btn.disabled = false;
+  const hint = document.getElementById('upload-hint-' + n) || document.getElementById('run-hint-' + n);
+  if (hint) hint.textContent = 'Ready — click Upload';
 }
 
 // ─── Pipeline animation ───────────────────────────────────────────────────────
@@ -786,70 +710,73 @@ async function runPipeline(prefix, totalSteps, apiPromise, stepMs = 2200) {
 }
 
 // ─── Stage 1 ──────────────────────────────────────────────────────────────────
-async function runStage1() {
+async function uploadFile1() {
   const file = selectedFiles[1];
   if (!file) { alert('Please select a file first.'); return; }
 
-  document.getElementById('run-btn-1').disabled = true;
-  document.getElementById('upload-area-1').style.display = 'none';
-  document.getElementById('agent-status-1').style.display = 'block';
-  updateIntel('Stage 1 running…', 'Running', '#dbeafe', '#1d4ed8');
+  const btn = document.getElementById('upload-btn-1');
+  btn.disabled = true;
+  document.getElementById('upload-hint-1').textContent = 'Uploading…';
+  addAudit(1, 'UPLOAD', `Uploading ${file.name}…`);
 
   try {
-    // 1. Upload document
-    const uploadForm = new FormData();
-    uploadForm.append('file', file);
-    addAudit(null, 'UPLOAD', `${file.name} uploaded`);
-    const upRes = await fetch(`${API}/stage1/upload`, { method: 'POST', body: uploadForm });
-    if (!upRes.ok) throw new Error((await upRes.json()).detail || 'Upload failed');
-    const upData = await upRes.json();
-    sessionId = upData.session_id;
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API}/stage1/upload`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
+    const data = await res.json();
+    sessionId = data.session_id;
+
+    // Show success message
+    document.getElementById('upload-success-text-1').textContent =
+      `"${file.name}" uploaded successfully. Session: ${sessionId}`;
+    document.getElementById('upload-success-1').style.display = 'block';
+    document.getElementById('upload-hint-1').textContent = 'Uploaded';
+
+    // Show chat box
+    document.getElementById('chat-area-1').style.display = 'block';
+
     intelSetSession(sessionId);
-    intelSetStage1('Uploading + analyzing…', 'Running', '#dbeafe', '#1d4ed8');
-    addAudit(1, 'RUNNING', `Stage 1 agent triggered · ${file.name}`);
-
-    // 2. Animate pipeline steps sequentially; last step waits for real API response
-    const apiPromise = (async () => {
-      const runForm = new FormData();
-      runForm.append('session_id', sessionId);
-      const runRes = await fetch(`${API}/stage1/run`, { method: 'POST', body: runForm });
-      if (!runRes.ok) throw new Error((await runRes.json()).detail || 'Analysis failed');
-      return runRes.json();
-    })();
-
-    const runData = await runPipeline('ps1-', 5, apiPromise);
-    if (runData.status === 'failed') throw new Error(runData.report?.error || 'Analysis failed');
-
-    document.getElementById('agent-status-badge-1').textContent = 'Complete';
-    document.getElementById('agent-status-badge-1').style.background = '#d1fae5';
-    document.getElementById('agent-status-badge-1').style.color = '#065f46';
-
-    // 4. Render real report
-    renderStage1Report(runData.report);
-    document.getElementById('report-1').style.display = 'block';
-    s1Done = true;
-    const t2 = document.getElementById('stage-tab-2');
-    t2.classList.remove('locked');
-    document.getElementById('stagenum-2').className = 'stage-num sn-pending';
-
-    const objCount = runData.report?.impacted_objects?.length ?? 0;
-    const fieldCount = (runData.report?.impacted_objects || []).reduce((s, o) => s + (o.impacted_fields?.length ?? 0), 0);
-    const highCount = runData.report?.summary?.high_severity_count ?? 0;
-    updateIntel(`Stage 1 complete · ${objCount} objects`, 'Complete', '#d1fae5', '#065f46');
-    intelSetStage1(`${objCount} objects · ${fieldCount} fields`, 'Done', '#d1fae5', '#065f46');
-    intelSetStage2('Ready — upload Integration Spec', 'Unlocked', '#ede9fe', '#5b21b6');
-    addAudit(1, 'COMPLETE', `${objCount} objects · ${fieldCount} fields · ${highCount} HIGH severity`);
-    addRunHistory(file.name, objCount, highCount, 1);
+    intelSetStage1('File uploaded — ready to chat', 'Uploaded', '#dbeafe', '#1d4ed8');
+    updateIntel('Stage 1 — file uploaded', 'Uploaded', '#dbeafe', '#1d4ed8');
+    addAudit(1, 'COMPLETE', `${file.name} uploaded · session ${sessionId}`);
 
   } catch (err) {
-    showError('Stage 1 failed: ' + err.message);
-    document.getElementById('upload-area-1').style.display = 'block';
-    document.getElementById('agent-status-1').style.display = 'none';
-    document.getElementById('run-btn-1').disabled = false;
-    updateIntel('Stage 1 failed', 'Error', '#fee2e2', '#991b1b');
-    intelSetStage1('Failed: ' + err.message.substring(0, 40), 'Error', '#fee2e2', '#991b1b');
+    showError('Upload failed: ' + err.message);
+    btn.disabled = false;
+    document.getElementById('upload-hint-1').textContent = 'Upload failed — try again';
     addAudit(1, 'ERROR', err.message.substring(0, 80));
   }
+}
+
+async function submitChat1() {
+  const input = document.getElementById('chat-input-1');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  appendChatMsg(1, msg, 'user');
+  input.value = '';
+
+  try {
+    const form = new FormData();
+    form.append('session_id', sessionId || '');
+    form.append('message', msg);
+    const res = await fetch(`${API}/stage1/chat`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Chat error');
+    const data = await res.json();
+    appendChatMsg(1, data.response, 'ai');
+  } catch (err) {
+    appendChatMsg(1, 'Error: ' + err.message, 'ai');
+  }
+}
+
+function appendChatMsg(stage, text, role) {
+  const box = document.getElementById('chat-messages-' + stage);
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + (role === 'user' ? 'user' : 'ai');
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
 }
 
 function renderStage1Report(report) {
@@ -1173,67 +1100,17 @@ async function resetAll() {
   document.getElementById('stage-2-area').style.display = 'none';
 
   document.getElementById('upload-area-1').style.display = 'block';
-  document.getElementById('agent-status-1').style.display = 'none';
-  document.getElementById('report-1').style.display = 'none';
-
-  // Reset pipeline steps to pending
-  for (let i = 0; i < 5; i++) {
-    const el = document.getElementById('ps1-' + i);
-    if (el) {
-      el.className = 'pipe-step pending';
-      el.querySelector('.pipe-icon').className = 'pipe-icon pi-pending';
-      el.querySelector('.pipe-icon').innerHTML = String(i + 1);
-    }
-    const pt = document.getElementById('pt1-' + i);
-    if (pt) pt.textContent = '—';
-  }
-  const badge1 = document.getElementById('agent-status-badge-1');
-  badge1.textContent = 'Running';
-  badge1.style.background = '';
-  badge1.style.color = '';
+  document.getElementById('upload-success-1').style.display = 'none';
+  document.getElementById('upload-success-text-1').textContent = '';
+  document.getElementById('chat-area-1').style.display = 'none';
+  document.getElementById('chat-messages-1').innerHTML = '';
+  document.getElementById('chat-input-1').value = '';
 
   // Reset file input & list
   document.getElementById('file1').value = '';
   document.getElementById('filelist1').innerHTML = '';
-  document.getElementById('run-btn-1').disabled = true;
-  document.getElementById('run-hint-1').textContent = 'Upload a document to enable';
-
-  // ── Reset Stage 2 area ──────────────────────────────────────────────────────
-  document.querySelector('#stage-2-area .upload-card').style.display = 'block';
-  document.getElementById('agent-status-2').style.display = 'none';
-  document.getElementById('report-2').style.display = 'none';
-
-  for (let i = 0; i < 5; i++) {
-    const el = document.getElementById('ps2-' + i);
-    if (el) {
-      el.className = 'pipe-step pending';
-      el.querySelector('.pipe-icon').className = 'pipe-icon pi-pending';
-      el.querySelector('.pipe-icon').innerHTML = String(i + 1);
-    }
-    const pt = document.getElementById('pt2-' + i);
-    if (pt) pt.textContent = '—';
-  }
-  const badge2 = document.getElementById('agent-status-badge-2');
-  badge2.textContent = 'Running';
-  badge2.style.background = '';
-  badge2.style.color = '';
-
-  document.getElementById('file2').value = '';
-  document.getElementById('filelist2').innerHTML = '';
-  document.getElementById('run-btn-2').disabled = true;
-  document.getElementById('run-hint-2').textContent = 'Upload Integration Spec to enable';
-
-  // ── Reset chat panels ───────────────────────────────────────────────────────
-  document.getElementById('llm-messages-1').innerHTML = `
-    <div class="msg msg-ai">
-      Hi! I've analyzed the Stage 1 impact report. You can <strong>click any row</strong> in the tables above to ask me about it, or type your question below. What would you like to understand?
-    </div>`;
-  document.getElementById('llm-messages-2').innerHTML = `
-    <div class="msg msg-ai">
-      The final integration impact report is ready. I can explain any finding, walk you through remediation steps, or help you understand why a specific integration is affected. What do you need?
-    </div>`;
-  document.getElementById('llm-input-1').value = '';
-  document.getElementById('llm-input-2').value = '';
+  document.getElementById('upload-btn-1').disabled = true;
+  document.getElementById('upload-hint-1').textContent = 'Select a document to enable';
 
   // ── Reset Intel pane ────────────────────────────────────────────────────────
   updateIntel('No run started', 'Idle', 'var(--surface)', 'var(--muted)');
