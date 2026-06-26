@@ -5,7 +5,6 @@ File handling utilities — saving uploads, cleaning up temp files.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from config import settings

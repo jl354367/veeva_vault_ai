@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -34,10 +34,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Impact Analyzer starting up (env=%s)", settings.app_env)
-    if not settings.anthropic_api_key:
+    if not settings.aws_agent_id:
         logger.warning(
-            "ANTHROPIC_API_KEY is not set — LLM calls will fail. "
-            "Set it in .env or as an environment variable."
+            "AWS_AGENT_ID is not set — Bedrock Agent path disabled, "
+            "falling back to local LLM."
+        )
+    else:
+        logger.info(
+            "Bedrock Agent configured — agent_id=%s  alias_id=%s  region=%s",
+            settings.aws_agent_id, settings.aws_agent_alias_id, settings.aws_region,
         )
     yield
     logger.info("Impact Analyzer shutting down")
@@ -95,7 +100,7 @@ app.include_router(stage2.router)
 @app.get("/", tags=["UI"], include_in_schema=False)
 async def serve_ui():
     """Serve the frontend so it runs on the same origin as the API (no CORS issues)."""
-    ui_file = Path(__file__).parent / "index.html"
+    ui_file = Path(__file__).parent / "frontend" / "index.html"
     return FileResponse(str(ui_file), media_type="text/html")
 
 
@@ -126,13 +131,123 @@ async def delete_session(session_id: str):
 @app.get("/health", tags=["Health"])
 async def health():
     checks = {
-        "anthropic_api_key": bool(settings.anthropic_api_key),
+        "aws_agent_configured": bool(settings.aws_agent_id),
         "aws_s3_configured": bool(settings.s3_config_bucket),
-        "aws_agent_configured": bool(settings.aws_agent_lambda_arn or settings.aws_agent_id),
         "storage_writable": _check_storage(),
     }
     status = "healthy" if all(checks.values()) else "degraded"
     return {"status": status, "checks": checks}
+
+
+@app.get("/health/bedrock", tags=["Health"])
+async def health_bedrock():
+    """Show loaded Bedrock config and verify the agent + alias exist in AWS."""
+    config = {
+        "aws_agent_id": settings.aws_agent_id or "(not set)",
+        "aws_agent_alias_id": settings.aws_agent_alias_id or "(not set)",
+        "aws_region": settings.aws_region,
+        "bedrock_model_id": settings.bedrock_model_id,
+    }
+    if not settings.aws_agent_id or not settings.aws_agent_alias_id:
+        return {**config, "agent_check": "skipped — not configured"}
+    try:
+        import boto3
+        client = boto3.client(
+            "bedrock-agent",
+            region_name=settings.aws_region,
+            aws_access_key_id=settings.aws_access_key_id or None,
+            aws_secret_access_key=settings.aws_secret_access_key or None,
+        )
+        agent_resp = client.get_agent(agentId=settings.aws_agent_id)
+        alias_resp = client.get_agent_alias(
+            agentId=settings.aws_agent_id,
+            agentAliasId=settings.aws_agent_alias_id,
+        )
+        agent_status = agent_resp["agent"]["agentStatus"]
+        alias_name   = alias_resp["agentAlias"]["agentAliasName"]
+        alias_status = alias_resp["agentAlias"]["agentAliasStatus"]
+        routing      = alias_resp["agentAlias"].get("routingConfiguration", [])
+        version      = routing[0].get("agentVersion", "?") if routing else "?"
+        return {
+            **config,
+            "agent_check": "ok",
+            "agent_status": agent_status,
+            "alias_name": alias_name,
+            "alias_status": alias_status,
+            "alias_points_to_version": version,
+        }
+    except Exception as exc:
+        return {**config, "agent_check": "error", "detail": str(exc)}
+
+
+@app.get("/health/lambda/{session_id}", tags=["Health"])
+async def health_lambda(session_id: str = ""):
+    """Test what the action group Lambda actually returns for both Excel files."""
+    from services.aws_service import _boto_client
+    import json as _json
+
+    results = {}
+    try:
+        lam = _boto_client("lambda")
+
+        def _invoke(api_path, params):
+            payload = {
+                "actionGroup": "VaultDocumentFetcher",
+                "apiPath": api_path,
+                "httpMethod": "GET",
+                "parameters": [{"name": k, "value": v} for k, v in params.items()],
+            }
+            resp = lam.invoke(
+                FunctionName="vault_action_groups",
+                Payload=_json.dumps(payload).encode(),
+            )
+            raw = resp["Payload"].read().decode()
+            try:
+                body = _json.loads(raw)
+                inner = body.get("response", {}).get("responseBody", {}).get("application/json", {}).get("body", "{}")
+                return _json.loads(inner)
+            except Exception:
+                return {"raw": raw[:500]}
+
+        results["data_model_doc"] = _invoke("/fetch-data-model-doc", {"session_id": session_id})
+        results["config_report"]   = _invoke("/fetch-config-report", {})
+        # Show only first 500 chars of content so response is readable
+        for k in results:
+            if "content" in results[k]:
+                results[k]["content_preview"] = results[k].pop("content")[:500]
+        return {"status": "ok", "results": results}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/health/s3", tags=["Health"])
+async def health_s3():
+    """Actually connect to S3 and list the vault-reports prefix to verify credentials and bucket access."""
+    from services.aws_service import _boto_client, _is_aws_configured
+
+    if not _is_aws_configured():
+        return {"status": "skipped", "reason": "S3_CONFIG_BUCKET not set"}
+
+    try:
+        s3 = _boto_client("s3")
+        bucket = settings.s3_config_bucket
+        prefix = settings.s3_vault_reports_prefix
+
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=5)
+        files = [
+            {"key": obj["Key"], "last_modified": obj["LastModified"].isoformat(), "size_kb": obj["Size"] // 1024}
+            for obj in response.get("Contents", [])
+            if obj["Key"].lower().endswith((".xlsx", ".xlsm"))
+        ]
+        return {
+            "status": "ok",
+            "bucket": bucket,
+            "prefix": prefix,
+            "excel_files_found": len(files),
+            "latest_files": files,
+        }
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
 
 
 def _check_storage() -> bool:

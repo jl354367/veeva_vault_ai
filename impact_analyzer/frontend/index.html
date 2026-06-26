@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Impact Analyzer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --navy:#0033A0;--violet:#7c3aed;--ok:#059669;--warn:#d97706;--bad:#dc2626;
+  --paper:#f8fafc;--border:rgba(0,0,0,0.08);--text:#1e293b;--muted:#64748b;--faint:#94a3b8;
+  --surface:#f1f5f9;--white:#ffffff;--topbar-h:48px;
+}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--text);font-size:13px;}
+/* ===== APP SHELL ===== */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;z-index:20;}
+.topbar-logo{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;color:var(--navy);}
+.logo-dot{width:10px;height:10px;background:linear-gradient(135deg,var(--navy),var(--violet));border-radius:50%;}
+.topbar-right{display:flex;align-items:center;gap:14px;}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--violet));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;cursor:pointer;}
+.body{display:flex;flex:1;overflow:hidden;}
+/* ===== SIDEBAR ===== */
+.sidebar{width:220px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.sidebar-section{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:16px 16px 4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--muted);cursor:pointer;border-left:2.5px solid transparent;transition:all .12s;}
+.nav-item:hover{background:var(--surface);color:var(--text);}
+.nav-item.active{background:#eff6ff;color:var(--navy);font-weight:700;border-left-color:var(--navy);}
+.nav-item i{font-size:15px;}
+/* ===== MAIN ===== */
+.main{flex:1;overflow-y:auto;padding:24px;background:var(--paper);}
+.page{display:none;}
+.page.active{display:block;}
+.page-header{margin-bottom:12px;}
+.page-header h1{font-size:18px;font-weight:700;color:var(--text);margin-bottom:2px;}
+.page-header p{font-size:11px;color:var(--muted);}
+/* ===== INTEL PANE ===== */
+.intel-pane{width:220px;background:var(--white);border-left:1px solid var(--border);flex-shrink:0;overflow-y:auto;padding:16px 14px;}
+.intel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:12px;}
+.intel-card{background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.intel-card-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.intel-card-sub{font-size:11px;color:var(--muted);}
+.intel-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-top:5px;}
+/* ===== IMPACT ANALYZER PAGE ===== */
+/* upload area */
+.upload-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;}
+.upload-card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;display:flex;align-items:center;gap:8px;}
+.upload-card-sub{font-size:11px;color:var(--muted);margin-bottom:10px;}
+.dropzone{border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface);}
+.dropzone:hover,.dropzone.dragging{border-color:var(--navy);background:#eff6ff;}
+.dropzone i{font-size:22px;color:var(--faint);display:block;margin:0 auto 4px;}
+.dropzone .dz-title{font-size:13px;font-weight:600;color:var(--text);}
+.dropzone .dz-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.file-list{margin-top:12px;}
+.file-item{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--white);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+.file-item i{font-size:16px;color:var(--navy);}
+.file-name{flex:1;font-size:12px;font-weight:600;}
+.file-size{font-size:11px;color:var(--muted);}
+.file-remove{background:none;border:none;cursor:pointer;color:var(--faint);font-size:14px;padding:2px;}
+.file-remove:hover{color:var(--bad);}
+/* badges */
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;}
+.badge-blue{background:#dbeafe;color:#1d4ed8;}
+.badge-green{background:#d1fae5;color:#065f46;}
+.badge-amber{background:#fef3c7;color:#92400e;}
+.badge-red{background:#fee2e2;color:#991b1b;}
+.badge-violet{background:#ede9fe;color:#5b21b6;}
+.badge-gray{background:var(--surface);color:var(--muted);}
+/* run button */
+.run-btn{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--navy),var(--violet));color:white;border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .12s;}
+.run-btn:disabled{opacity:.4;cursor:not-allowed;}
+.run-btn:not(:disabled):hover{opacity:.9;}
+/* LLM chat */
+.llm-panel{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+.llm-input-row .llm-send{flex-shrink:0;border-radius:7px;}
+.llm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface);}
+.llm-header-title{font-size:13px;font-weight:700;}
+.llm-messages{padding:0;min-height:420px;max-height:65vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.llm-messages.has-msgs{padding:14px;}
+.llm-messages.compact{min-height:200px;max-height:40vh;}
+.llm-input-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
+.msg{max-width:85%;padding:10px 14px;border-radius:10px;font-size:12px;line-height:1.6;}
+.msg-user{background:var(--navy);color:white;align-self:flex-end;border-bottom-right-radius:3px;}
+.msg-ai{background:var(--surface);color:var(--text);align-self:flex-start;border-bottom-left-radius:3px;border:1px solid var(--border);}
+.msg-ai strong{color:var(--navy);}
+.llm-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;outline:none;background:var(--paper);}
+.llm-input:focus{border-color:var(--navy);}
+.llm-send{background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
+.llm-send:hover{background:#0026b5;}
+/* ===== REPORT PANEL ===== */
+.report-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.report-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);}
+.report-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+.report-label-dot{width:8px;height:8px;background:var(--ok);border-radius:50%;display:inline-block;flex-shrink:0;}
+.report-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;}
+.report-meta{display:flex;align-items:center;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--muted);}
+.report-meta-item{display:flex;align-items:center;gap:4px;}
+.report-stats{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);}
+.stat-card{padding:18px 24px;border-right:1px solid var(--border);}
+.stat-card:last-child{border-right:none;}
+.stat-number{font-size:30px;font-weight:700;line-height:1.1;margin-bottom:3px;}
+.stat-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.stat-total .stat-number{color:var(--navy);}
+.stat-high .stat-number{color:var(--bad);}
+.stat-medium .stat-number{color:var(--warn);}
+.stat-low .stat-number{color:var(--ok);}
+.findings-section{padding:14px 24px;border-bottom:1px solid var(--border);background:#fafbff;}
+.findings-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.findings-grid{display:flex;flex-wrap:wrap;gap:6px;}
+.finding-pill{font-size:11px;padding:5px 11px;background:var(--white);border:1px solid var(--border);border-radius:20px;color:var(--text);line-height:1.4;max-width:480px;}
+.rpt-filter-bar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.filter-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px;}
+.filter-btn{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;border:1.5px solid var(--border);background:transparent;cursor:pointer;color:var(--muted);transition:all .12s;}
+.filter-btn.active{background:var(--navy);color:white;border-color:var(--navy);}
+.filter-btn.f-high.active{background:var(--bad);border-color:var(--bad);}
+.filter-btn.f-medium.active{background:var(--warn);border-color:var(--warn);}
+.filter-btn.f-low.active{background:var(--ok);border-color:var(--ok);}
+.rpt-search{flex:1;max-width:220px;margin-left:auto;padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;outline:none;}
+.rpt-search:focus{border-color:var(--navy);}
+.rpt-count{font-size:11px;color:var(--muted);white-space:nowrap;}
+.impact-tbl-wrap{overflow-x:auto;}
+.impact-tbl-head{display:grid;grid-template-columns:28px 36px 200px 100px 88px 1fr 210px;min-width:800px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);gap:8px;align-items:center;}
+/* ── Severity stripe on rows ── */
+.impact-row{border-bottom:1px solid var(--border);border-left:4px solid transparent;}
+.impact-row[data-sev="high"]{border-left-color:var(--bad);}
+.impact-row[data-sev="medium"]{border-left-color:var(--warn);}
+.impact-row[data-sev="low"]{border-left-color:var(--ok);}
+.impact-row-main{display:grid;grid-template-columns:28px 36px 200px 100px 88px 1fr 210px;min-width:800px;padding:12px 16px;font-size:12px;gap:8px;align-items:start;cursor:pointer;transition:background .12s;}
+.impact-row-main:hover{background:#f0f6ff;}
+.impact-row.open-row{background:#f8faff;}
+.expand-btn{width:20px;height:20px;border:none;background:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:4px;flex-shrink:0;margin-top:2px;transition:transform .15s;}
+.expand-btn:hover{background:var(--surface);}
+.row-num{color:var(--faint);font-size:11px;padding-top:2px;}
+.obj-name{font-weight:700;line-height:1.3;color:var(--navy);}
+.obj-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.sev-high{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;background:#fee2e2;color:var(--bad);border:1px solid #fca5a5;letter-spacing:.04em;}
+.sev-medium{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;background:#fef3c7;color:var(--warn);border:1px solid #fde68a;letter-spacing:.04em;}
+.sev-low{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;background:#d1fae5;color:var(--ok);border:1px solid #6ee7b7;letter-spacing:.04em;}
+.sev-critical{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;background:#3D0000;color:#FF6B6B;border:1px solid #FF4444;letter-spacing:.04em;}
+.impact-row[data-sev="critical"]{border-left-color:#7f1d1d;}
+.filter-btn.f-critical.active{background:#7f1d1d;border-color:#7f1d1d;}
+.export-btn{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:5px 11px;border-radius:6px;border:1.5px solid var(--border);background:white;color:var(--text);cursor:pointer;transition:all .12s;}
+.export-btn:hover{border-color:var(--navy);color:var(--navy);}
+.chat-suggestions{padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-top:1px dashed var(--border);background:#fafbff;}
+.chat-suggestions.hidden{display:none;}
+.suggest-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-right:2px;}
+.suggest-chip{font-size:11px;font-weight:500;padding:5px 11px;border-radius:14px;border:1px solid var(--border);background:white;color:var(--text);cursor:pointer;transition:all .12s;line-height:1.3;}
+.suggest-chip:hover{border-color:var(--violet);color:var(--violet);background:#faf5ff;}
+.impact-row-details{display:none;padding:16px 20px 18px 84px;background:#f8faff;border-top:1px solid #e0e7ff;}
+.impact-row-details.open{display:block;}
+.detail-section{margin-bottom:16px;}
+.detail-section:last-child{margin-bottom:0;}
+.detail-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.detail-tbl{width:100%;font-size:11px;border-collapse:collapse;border-radius:6px;overflow:hidden;}
+.detail-tbl th{text-align:left;padding:6px 10px;background:#e8eef8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--navy);}
+.detail-tbl td{padding:8px 10px;border-top:1px solid #e8eef8;vertical-align:top;line-height:1.5;}
+.detail-tbl tr:hover td{background:#f0f6ff;}
+.recs-list{list-style:none;padding:0;margin:0;}
+.recs-list li{font-size:11px;color:var(--text);line-height:1.7;padding:3px 0 3px 18px;position:relative;}
+.recs-list li::before{content:'→';position:absolute;left:0;color:var(--navy);font-weight:700;}
+/* Change type badges */
+.ct-new{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:#d1fae5;color:#065f46;letter-spacing:.03em;}
+.ct-mod{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:#fef3c7;color:#92400e;letter-spacing:.03em;}
+.ct-dep{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:#fee2e2;color:#991b1b;letter-spacing:.03em;}
+.ct-other{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:var(--surface);color:var(--muted);letter-spacing:.03em;}
+/* Type breakdown bar */
+.type-bar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 24px;border-bottom:1px solid var(--border);background:#fafbff;}
+.type-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:var(--white);border:1px solid var(--border);color:var(--text);}
+/* Better AI message */
+.msg-ai{border-left:3px solid var(--navy)!important;}
+.msg-analysis{background:linear-gradient(135deg,#eff6ff,#f5f3ff)!important;border-left:3px solid var(--violet)!important;border:1px solid #c7d2fe!important;}
+/* Thinking steps */
+.thinking-step{font-size:11px;color:var(--muted);font-style:italic;}
+.no-impact-bar{padding:14px 24px;border-top:1px solid var(--border);background:#f0fdf4;font-size:11px;display:flex;align-items:flex-start;gap:8px;}
+/* pulse animation for thinking indicator */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* scrollbar */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="logo-dot"></div>
+      Impact Analyzer
+    </div>
+    <div class="topbar-right">
+      <button onclick="resetAll()" id="reset-btn" title="Reset everything and start a new analysis" style="display:flex;align-items:center;gap:6px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        <i class="ti ti-refresh" style="font-size:14px"></i> Reset
+      </button>
+      <div style="font-size:12px;color:var(--muted);">Powered by Cognizant ISG</div>
+      <div class="avatar">SC</div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">Workspace</div>
+      <div class="nav-item active" id="nav-analyzer" onclick="showPage('analyzer')">
+        <i class="ti ti-radar"></i> Impact Analyzer
+      </div>
+      <div class="nav-item" id="nav-history" onclick="showPage('history')">
+        <i class="ti ti-history"></i> Run history
+      </div>
+      <div class="nav-item" id="nav-audit" onclick="showPage('audit')">
+        <i class="ti ti-report-analytics"></i> Audit log
+      </div>
+      <div class="sidebar-section">Admin</div>
+      <div class="nav-item" onclick="">
+        <i class="ti ti-settings"></i> Settings
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- ===== IMPACT ANALYZER PAGE ===== -->
+      <div class="page active" id="page-analyzer">
+        <div class="page-header">
+          <h1>Vault Impact Analyzer</h1>
+          <p>Upload a Veeva Data Model Changes document and chat with VaultBot about its impact on your configuration.</p>
+        </div>
+
+        <div id="stage-1-area">
+
+          <!-- UPLOAD -->
+          <div class="upload-card" id="upload-area-1" style="display:block">
+            <div class="upload-card-title">
+              <i class="ti ti-file-upload" style="color:var(--navy)"></i>
+              Data Model Changes Document
+              <span class="badge badge-blue">Required</span>
+            </div>
+            <div class="upload-card-sub">Upload the Veeva release's Data Model Changes document. The Configuration Report is fetched from S3 automatically.</div>
+            <div class="dropzone" id="dz1" onclick="triggerFileInput('file1')" ondragover="onDragOver(event,'dz1')" ondragleave="onDragLeave('dz1')" ondrop="onDrop(event,'dz1','file1')">
+              <i class="ti ti-cloud-upload"></i>
+              <div class="dz-title">Drag &amp; drop or click to browse</div>
+              <div class="dz-sub">PDF, DOCX, XLSX · max 50MB</div>
+            </div>
+            <input type="file" id="file1" style="display:none" accept=".pdf,.docx,.xlsx" onchange="onFileSelect('file1','filelist1','dz1')"/>
+            <div class="file-list" id="filelist1"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+              <button class="run-btn" id="upload-btn-1" disabled onclick="uploadFile1()">
+                <i class="ti ti-upload"></i> Upload
+              </button>
+              <span id="upload-hint-1" style="font-size:11px;color:var(--muted);">Select a document to enable</span>
+            </div>
+            <div id="upload-success-1" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#166534;">
+              <i class="ti ti-check-circle"></i> <span id="upload-success-text-1"></span>
+            </div>
+            <div id="upload-error-1" style="display:none;margin-top:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:12px;color:#991b1b;">
+              <i class="ti ti-alert-circle"></i> <span id="upload-error-text-1"></span>
+            </div>
+          </div>
+
+          <!-- CHAT BOX (shown after upload) -->
+          <div id="chat-area-1" style="display:none">
+            <div class="llm-panel">
+              <div class="llm-header">
+                <i class="ti ti-sparkles" style="color:var(--violet);font-size:16px"></i>
+                <div class="llm-header-title">Chat with VaultBot</div>
+                <span style="font-size:11px;color:var(--muted);font-weight:500">Ask anything about the release or your config</span>
+              </div>
+              <div class="llm-messages" id="chat-messages-1"></div>
+              <!-- Quick-prompt chips, shown only on empty chat -->
+              <div id="chat-suggestions-1" class="chat-suggestions">
+                <span class="suggest-label">Try:</span>
+                <button class="suggest-chip" onclick="askQuickFilter('Run a full impact analysis')">Run a full impact analysis</button>
+                <button class="suggest-chip" onclick="askQuickFilter('What are the critical and high severity changes?')">Critical changes only</button>
+                <button class="suggest-chip" onclick="askQuickFilter('Show me workflow and lifecycle impacts')">Workflow impacts</button>
+                <button class="suggest-chip" onclick="askQuickFilter('What fields are being removed in this release?')">Removed fields</button>
+                <button class="suggest-chip" onclick="askQuickFilter('Give me the impact as a markdown table')">As a table</button>
+                <button class="suggest-chip" onclick="askQuickFilter('Export the analysis as JSON')">Export JSON</button>
+              </div>
+              <div class="llm-input-row">
+                <input class="llm-input" id="chat-input-1" placeholder='Ask anything — e.g. "Run a full analysis" or "Why is X affected?"' onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitChat1();}"/>
+                <button class="llm-send" id="chat-submit-1" onclick="submitChat1()">Submit</button>
+              </div>
+            </div>
+            <div id="export-controls-1" style="display:none;align-items:center;gap:8px;margin:10px 0 0;">
+              <span style="font-size:11px;color:var(--muted);font-weight:600">Export:</span>
+              <button onclick="exportReport('json')" class="export-btn"><i class="ti ti-download"></i> JSON</button>
+              <button onclick="exportReport('csv')" class="export-btn"><i class="ti ti-download"></i> CSV</button>
+              <button onclick="exportReport('markdown')" class="export-btn"><i class="ti ti-download"></i> Markdown</button>
+            </div>
+            <div id="report-panel-1" style="display:none;margin-top:16px;"></div>
+          </div>
+
+        </div>
+
+      </div><!-- /page-analyzer -->
+
+      <!-- RUN HISTORY PAGE -->
+      <div class="page" id="page-history">
+        <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div><h1>Run History</h1><p>All analysis runs in this session</p></div>
+          <button onclick="clearHistory()" title="Clear run history" style="display:flex;align-items:center;gap:5px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;margin-top:4px;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:14px"></i> Clear History</button>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+          <div style="display:grid;grid-template-columns:140px 1fr 100px 100px 80px;padding:8px 16px;background:var(--surface);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);gap:8px;">
+            <span>Date</span><span>Documents</span><span>Objects</span><span>Severity</span><span>Stage</span>
+          </div>
+          <div id="history-rows"></div>
+          <div id="history-empty" style="padding:32px;text-align:center;color:var(--faint);font-size:12px;">No runs yet — complete an analysis to see history here.</div>
+        </div>
+      </div>
+
+      <!-- AUDIT LOG PAGE -->
+      <div class="page" id="page-audit">
+        <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div><h1>Audit Log</h1><p>All agent runs and user actions in this session</p></div>
+          <button onclick="clearAudit()" title="Clear audit log" style="display:flex;align-items:center;gap:5px;background:none;border:1.5px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;margin-top:4px;" onmouseover="this.style.borderColor='var(--bad)';this.style.color='var(--bad)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:14px"></i> Clear Log</button>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+          <div style="display:grid;grid-template-columns:130px 90px 100px 1fr;padding:8px 16px;background:var(--surface);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);gap:8px;"><span>Time</span><span>Stage</span><span>Action</span><span>Detail</span></div>
+          <div id="audit-rows"></div>
+          <div id="audit-empty" style="padding:32px;text-align:center;color:var(--faint);font-size:12px;">No actions yet — upload a document to start.</div>
+        </div>
+      </div>
+
+    </div><!-- /main -->
+
+    <!-- INTEL PANE -->
+    <div class="intel-pane">
+      <div class="intel-title">Status</div>
+      <div class="intel-card">
+        <div class="intel-card-title">Analysis</div>
+        <div class="intel-card-sub" id="intel-run-status">No run started</div>
+        <span class="intel-tag" id="intel-run-tag" style="background:var(--surface);color:var(--muted);">Idle</span>
+      </div>
+      <div class="intel-card">
+        <div class="intel-card-title">Session</div>
+        <div class="intel-card-sub" id="intel-session" style="font-family:monospace;font-size:10px;word-break:break-all;">—</div>
+      </div>
+      <div class="intel-card">
+        <div class="intel-card-title">Last report</div>
+        <div class="intel-card-sub" id="intel-s1-detail">Not started</div>
+        <span class="intel-tag" id="intel-s1-tag" style="background:var(--surface);color:var(--muted);">—</span>
+      </div>
+      <div class="intel-card" id="intel-health-card" style="margin-top:14px;">
+        <div class="intel-card-title" style="color:var(--navy)">Backend</div>
+        <div class="intel-card-sub" id="intel-health-sub">Checking…</div>
+        <span class="intel-tag" id="intel-health-tag" style="background:var(--surface);color:var(--muted);">—</span>
+      </div>
+    </div>
+
+  </div><!-- /body -->
+</div><!-- /app -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const API = window.location.origin.startsWith('file:') ? 'http://localhost:8000' : '';
+let sessionId = null;
+let s1Done = false;
+let selectedFiles = { 1: null };
+const auditLog = [];       // [{time, stage, action, detail}]
+const runHistory = [];     // [{date, docs, objects, highCount, stagesDone}]
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('nav-' + name)?.classList.add('active');
+}
+
+// ─── File handling ────────────────────────────────────────────────────────────
+function triggerFileInput(id) { document.getElementById(id).click(); }
+
+function onDragOver(e, dzId) { e.preventDefault(); document.getElementById(dzId).classList.add('dragging'); }
+function onDragLeave(dzId) { document.getElementById(dzId).classList.remove('dragging'); }
+function onDrop(e, dzId, fileId) {
+  e.preventDefault();
+  document.getElementById(dzId).classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f, fileId.replace('file', 'filelist'), dzId, fileId);
+}
+
+function onFileSelect(fileId, listId, dzId) {
+  const f = document.getElementById(fileId).files[0];
+  if (f) processFile(f, listId, dzId, fileId);
+}
+
+function processFile(file, listId, dzId, fileId) {
+  const stageNum = fileId.replace('file', '');
+  selectedFiles[parseInt(stageNum)] = file;
+  const sz = (file.size / 1024 / 1024).toFixed(1) + 'MB';
+  document.getElementById(listId).innerHTML = `
+    <div class="file-item">
+      <i class="ti ti-file-text"></i>
+      <span class="file-name">${file.name}</span>
+      <span class="file-size">${sz}</span>
+      <button class="file-remove" onclick="removeFile('${listId}','${fileId}','${stageNum}')"><i class="ti ti-x"></i></button>
+    </div>`;
+  enableRun(stageNum);
+}
+
+function removeFile(listId, fileId, stageNum) {
+  selectedFiles[parseInt(stageNum)] = null;
+  document.getElementById(listId).innerHTML = '';
+  document.getElementById(fileId).value = '';
+  const btn = document.getElementById('upload-btn-' + stageNum) || document.getElementById('run-btn-' + stageNum);
+  if (btn) btn.disabled = true;
+  const hint = document.getElementById('upload-hint-' + stageNum) || document.getElementById('run-hint-' + stageNum);
+  if (hint) hint.textContent = 'Select a document to enable';
+}
+
+function enableRun(n) {
+  const btn = document.getElementById('upload-btn-' + n) || document.getElementById('run-btn-' + n);
+  if (btn) btn.disabled = false;
+  const hint = document.getElementById('upload-hint-' + n) || document.getElementById('run-hint-' + n);
+  if (hint) hint.textContent = 'Ready — click Upload';
+}
+
+// ─── Stage 1 ──────────────────────────────────────────────────────────────────
+async function uploadFile1() {
+  const file = selectedFiles[1];
+  if (!file) { alert('Please select a file first.'); return; }
+
+  const btn = document.getElementById('upload-btn-1');
+  btn.disabled = true;
+  document.getElementById('upload-hint-1').textContent = 'Uploading…';
+  addAudit(1, 'UPLOAD', `Uploading ${file.name}…`);
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API}/stage1/upload`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
+    const data = await res.json();
+    sessionId = data.session_id;
+
+    // Show success message
+    document.getElementById('upload-success-text-1').textContent = `${file.name} successfully uploaded`;
+    document.getElementById('upload-success-1').style.display = 'block';
+    document.getElementById('upload-error-1').style.display = 'none';
+    document.getElementById('upload-hint-1').textContent = 'Uploaded';
+
+    // Show chat box
+    document.getElementById('chat-area-1').style.display = 'block';
+
+    intelSetSession(sessionId);
+    intelSetStage1('File uploaded — ready to chat', 'Uploaded', '#dbeafe', '#1d4ed8');
+    updateIntel('File uploaded — ready to chat', 'Uploaded', '#dbeafe', '#1d4ed8');
+    addAudit(1, 'COMPLETE', `${file.name} uploaded · session ${sessionId}`);
+
+  } catch (err) {
+    document.getElementById('upload-error-text-1').textContent = 'Upload failed: ' + err.message;
+    document.getElementById('upload-error-1').style.display = 'block';
+    document.getElementById('upload-success-1').style.display = 'none';
+    btn.disabled = false;
+    document.getElementById('upload-hint-1').textContent = 'Upload failed — try again';
+    addAudit(1, 'ERROR', err.message.substring(0, 80));
+  }
+}
+
+async function submitChat1() {
+  const input = document.getElementById('chat-input-1');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  // Hide quick-prompt chips once the user starts chatting
+  const suggestions = document.getElementById('chat-suggestions-1');
+  if (suggestions) suggestions.classList.add('hidden');
+
+  appendChatMsg(1, msg, 'user');
+  input.value = '';
+
+  const submitBtn = document.getElementById('chat-submit-1');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '…';
+  const thinkingEl = appendThinking(1);
+
+  try {
+    const form = new FormData();
+    form.append('session_id', sessionId || '');
+    form.append('message', msg);
+    const res = await fetch(`${API}/stage1/chat`, { method: 'POST', body: form });
+    thinkingEl.remove();
+    if (!res.ok) throw new Error((await res.json()).detail || 'Chat error');
+    const data = await res.json();
+
+    // Always render the agent's response text as the chat bubble (full markdown).
+    appendChatMsg(1, data.response || '(no response)', 'ai');
+
+    // If a structured report came through, also populate the report panel.
+    if (data.report) {
+      renderReportPanel(1, data.report, 'Analysis Report');
+      updateIntelWithReport(data.report);
+      _lastReport = data.report;
+      _showExportControls(true);
+
+      // Detect likely token-limit truncation
+      const objs = data.report.impacted_objects || [];
+      const summary = data.report.summary || {};
+      const expected = summary.total_changes || 0;
+      if (expected > 0 && objs.length < expected) {
+        appendChatMsg(
+          1,
+          `⚠️ The agent reported **${expected}** total changes but only **${objs.length}** are shown — ` +
+          `the response hit a token limit. ` +
+          `Try *"show only critical and high severity"* for full detail on those items.`,
+          'ai',
+        );
+      }
+    } else {
+      // Fallback: response text itself may contain JSON the backend didn't pluck out.
+      const recovered = _tryParseAnalysisJSON(data.response);
+      if (recovered) {
+        renderReportPanel(1, recovered, 'Analysis Report');
+        updateIntelWithReport(recovered);
+        _lastReport = recovered;
+        _showExportControls(true);
+      }
+    }
+
+    addAudit(1, 'COMPLETE', msg.substring(0, 60));
+  } catch (err) {
+    thinkingEl.remove();
+    if (err.message && err.message.toLowerCase().includes('session not found')) {
+      _showSessionExpired();
+    } else {
+      appendChatMsg(1, 'Error: ' + err.message, 'ai');
+    }
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit';
+  }
+}
+
+function _showSessionExpired() {
+  const box = document.getElementById('chat-messages-1');
+  const div = document.createElement('div');
+  div.className = 'msg msg-ai';
+  div.innerHTML = `
+    <strong style="color:var(--bad)">⚠ Session expired</strong><br>
+    <span style="color:var(--muted)">The server was restarted and your session was lost. Please reset and re-upload your document.</span><br>
+    <button onclick="resetAll()" style="margin-top:8px;display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:var(--navy);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">
+      ↺ Reset &amp; Start New Analysis
+    </button>`;
+  box.appendChild(div);
+  box.classList.add('has-msgs');
+  box.scrollTop = box.scrollHeight;
+  // Lock the input so user doesn't keep trying on a dead session
+  document.getElementById('chat-input-1').disabled = true;
+  document.getElementById('chat-submit-1').disabled = true;
+}
+
+function appendThinking(stage) {
+  const box = document.getElementById('chat-messages-' + stage);
+  const div = document.createElement('div');
+  div.className = 'msg msg-ai';
+  div.style.cssText = 'padding:10px 14px;min-width:200px;';
+  div.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--navy);animation:pulse 1s infinite;"></span>
+      Processing your request
+    </div>
+    <div id="thinking-step-${stage}" class="thinking-step">Calling Bedrock Agent...</div>`;
+  box.appendChild(div);
+  box.classList.add('has-msgs');
+  box.scrollTop = box.scrollHeight;
+
+  const steps = [
+    'Calling Bedrock Agent...',
+    'Fetching Data Model Changes document...',
+    'Fetching Vault Configuration Report...',
+    'Cross-referencing changes against config...',
+    'Calculating severity and impact...',
+    'Generating structured report...',
+  ];
+  let idx = 0;
+  const stepEl = div.querySelector(`#thinking-step-${stage}`);
+  div._interval = setInterval(() => {
+    idx = (idx + 1) % steps.length;
+    if (stepEl) stepEl.textContent = steps[idx];
+  }, 2200);
+
+  const origRemove = div.remove.bind(div);
+  div.remove = () => { clearInterval(div._interval); origRemove(); };
+  return div;
+}
+
+function appendChatMsg(stage, text, role, isAnalysis) {
+  const box = document.getElementById('chat-messages-' + stage);
+  const div = document.createElement('div');
+  if (role === 'user') {
+    div.className = 'msg msg-user';
+    div.innerHTML = text.split('\n').map(l => esc(l)).join('<br>');
+  } else if (isAnalysis) {
+    div.className = 'msg msg-ai msg-analysis';
+    let cleanText = text.replace(/\{[\s\S]*?"impacted_objects"[\s\S]*\}/g, '').trim();
+    cleanText = cleanText.replace(/```(?:json)?[\s\S]*?```/g, '').trim();
+    const objs = cleanText.match(/(\d+)\s+(?:impacted\s+area|change)/i);
+    const total = objs ? objs[1] : '?';
+    div.innerHTML = `
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--violet);margin-bottom:5px">✦ Analysis Complete</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">${esc(total)} impacted area${total === '1' ? '' : 's'} found</div>
+      <div style="font-size:11px;color:var(--muted)">${_renderMarkdown(cleanText) || 'See the detailed report below.'}</div>
+      <div style="font-size:10px;color:var(--violet);margin-top:6px;font-weight:600">↓ See the detailed report below</div>`;
+  } else {
+    div.className = 'msg msg-ai';
+    // Strip any JSON block that leaked through into a regular AI message
+    let cleanText = text;
+    if (cleanText.includes('"impacted_objects"')) {
+      cleanText = cleanText.replace(
+        /\{[\s\S]*?"impacted_objects"[\s\S]*\}/g,
+        '_[structured report rendered below]_',
+      ).trim();
+      cleanText = cleanText.replace(/```(?:json)?[\s\S]*?```/g, '').trim();
+    }
+    div.innerHTML = _renderMarkdown(cleanText);
+  }
+  box.appendChild(div);
+  box.classList.add('has-msgs');
+  box.scrollTop = box.scrollHeight;
+}
+
+function _renderMarkdown(text) {
+  if (!text) return '';
+  // ── 0. Extract and stash code fences and tables BEFORE escaping, so their
+  //       inner pipes/brackets don't get HTML-escaped.
+  const fences = [];
+  let working = String(text).replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = fences.length;
+    fences.push({ lang: lang || '', code });
+    return `\x00FENCE${idx}\x00`;
+  });
+
+  const tables = [];
+  working = working.replace(
+    /(^\|.+\|\s*\n\|[\s\-:|]+\|\s*\n(?:\|.*\|\s*\n?)+)/gm,
+    (block) => {
+      const idx = tables.length;
+      tables.push(block);
+      return `\x00TABLE${idx}\x00`;
+    }
+  );
+
+  // ── 1. Escape HTML on the remaining (non-fence, non-table) text.
+  let s = working
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+  // ── 2. Bold, inline code
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`([^`\n]+)`/g,
+    '<code style="background:var(--surface);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:11px">$1</code>');
+
+  // ── 3. Line-by-line: headers, bullets, blanks
+  const lines = s.split('\n');
+  const out = [];
+  let inList = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^[•\-\*]\s/.test(t) || /^\d+\.\s/.test(t)) {
+      if (!inList) { out.push('<ul style="padding-left:16px;margin:4px 0;list-style:disc">'); inList = true; }
+      const content = t.replace(/^[•\-\*]\s+/, '').replace(/^\d+\.\s+/, '');
+      out.push('<li style="margin:2px 0">' + content + '</li>');
+    } else {
+      if (inList) { out.push('</ul>'); inList = false; }
+      if (/^#{1,3}\s/.test(t)) {
+        out.push('<div style="font-weight:700;color:var(--navy);margin:8px 0 3px">'
+          + t.replace(/^#{1,3}\s+/, '') + '</div>');
+      } else if (t === '') {
+        out.push('<div style="height:6px"></div>');
+      } else {
+        out.push('<div>' + line + '</div>');
+      }
+    }
+  }
+  if (inList) out.push('</ul>');
+  let result = out.join('');
+
+  // ── 4. Swap table placeholders back in as rendered HTML
+  result = result.replace(/\x00TABLE(\d+)\x00/g, (_, idx) => _renderMarkdownTable(tables[+idx]));
+
+  // ── 5. Swap code fence placeholders back in
+  result = result.replace(/\x00FENCE(\d+)\x00/g, (_, idx) => {
+    const { code } = fences[+idx];
+    const esc = String(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<pre style="background:var(--surface);padding:10px 12px;border-radius:6px;font-family:monospace;font-size:11px;overflow-x:auto;margin:6px 0;border:1px solid var(--border)"><code>${esc}</code></pre>`;
+  });
+
+  return result;
+}
+
+function _renderMarkdownTable(block) {
+  const rows = block.trim().split('\n').filter(r => r.trim().startsWith('|'));
+  if (rows.length < 2) return _escape(block);
+  const splitRow = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const headers = splitRow(rows[0]);
+  // rows[1] is the separator
+  const bodyRows = rows.slice(2).map(splitRow);
+
+  const cellStyle = 'border:1px solid var(--border);padding:5px 8px;text-align:left;';
+  const head = headers.map(h => `<th style="${cellStyle}background:var(--surface);font-weight:700;color:var(--navy)">${_escape(h)}</th>`).join('');
+  const body = bodyRows
+    .map(cells => '<tr>' + cells.map(c => `<td style="${cellStyle}">${_renderInline(c)}</td>`).join('') + '</tr>')
+    .join('');
+  return `<table style="border-collapse:collapse;margin:8px 0;font-size:11px;width:100%"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function _renderInline(text) {
+  let s = _escape(text);
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`([^`\n]+)`/g,
+    '<code style="background:var(--surface);padding:1px 4px;border-radius:3px;font-family:monospace;font-size:10px">$1</code>');
+  return s;
+}
+
+function _escape(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ─── JSON recovery helpers ────────────────────────────────────────────────────
+
+/**
+ * Try to extract a valid Vault analysis JSON object from an arbitrary string.
+ * Uses bracket-depth tracking to find balanced { } blocks, exactly as the
+ * Python backend does — this handles the case where the agent embeds JSON
+ * inside prose and the backend parse happened to fail.
+ * Returns the parsed object if it contains impacted_objects, else null.
+ */
+function _tryParseAnalysisJSON(text) {
+  if (!text || typeof text !== 'string') return null;
+  if (!text.includes('impacted_objects')) return null;
+
+  // Try every '{"' start — skip bare '{' in prose (e.g. "Based on {filter}: {...}")
+  const re = /\{\s*"/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const start = m.index;
+    let depth = 0, inStr = false, esc = false, end = -1;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (esc)                     { esc = false; continue; }
+      if (c === '\\' && inStr)     { esc = true;  continue; }
+      if (c === '"')               { inStr = !inStr; continue; }
+      if (inStr)                   continue;
+      if (c === '{')               depth++;
+      else if (c === '}')          { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) continue;
+    try {
+      const obj = JSON.parse(text.substring(start, end + 1));
+      if (obj && Array.isArray(obj.impacted_objects)) return obj;
+    } catch { /* try next candidate */ }
+  }
+  return null;
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+let _lastReport = null;
+
+function _showExportControls(show) {
+  const el = document.getElementById('export-controls-1');
+  if (el) el.style.display = show ? 'flex' : 'none';
+}
+
+function exportReport(format) {
+  if (!_lastReport) {
+    alert('No report to export yet.');
+    return;
+  }
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `vault-impact-${ts}.${format === 'markdown' ? 'md' : format}`;
+
+  let content, mime;
+  if (format === 'json') {
+    content = JSON.stringify(_lastReport, null, 2);
+    mime = 'application/json';
+  } else if (format === 'csv') {
+    content = _reportToCSV(_lastReport);
+    mime = 'text/csv';
+  } else if (format === 'markdown') {
+    content = _reportToMarkdown(_lastReport);
+    mime = 'text/markdown';
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function _reportToCSV(report) {
+  const rows = [['#', 'Object', 'Change Type', 'Field', 'Area Type', 'Area Name', 'Severity', 'Description', 'Recommendation']];
+  let n = 1;
+  for (const obj of (report.impacted_objects || [])) {
+    const areas = obj.impacted_areas && obj.impacted_areas.length ? obj.impacted_areas : [{}];
+    for (const a of areas) {
+      rows.push([
+        n++,
+        obj.object_name || obj.object_label || '',
+        obj.change_type || '',
+        obj.field_name || obj.field_label || '',
+        a.area_type || '',
+        a.area_name || '',
+        (a.risk || obj.overall_severity || '').toUpperCase(),
+        (a.description || obj.description || ''),
+        (a.recommendation || ''),
+      ]);
+    }
+  }
+  return rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\n');
+}
+
+function _reportToChatBubbleTable(report) {
+  const objs = (report.impacted_objects || []).slice(0, 20);
+  if (!objs.length) return '';
+  const summary = report.summary || {};
+  const total = summary.total_changes || summary.total_impacted_objects || objs.length;
+  const totalAreas = summary.total_impacted_areas
+    || objs.reduce((n, o) => n + (o.impacted_areas?.length || 0), 0);
+
+  const lines = [
+    `**Analysis complete** — ${total} change${total === 1 ? '' : 's'} affecting ${totalAreas} configuration area${totalAreas === 1 ? '' : 's'}.`,
+    '',
+    '| # | Object | Change | Field | Risk | Summary |',
+    '|---|--------|--------|-------|------|---------|',
+  ];
+  objs.forEach((o, i) => {
+    const risks = (o.impacted_areas || []).map(a => (a.risk || '').toUpperCase());
+    const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+    const sev = order.find(r => risks.includes(r)) || (o.overall_severity || '').toUpperCase() || '—';
+    const desc = (o.impacted_areas?.[0]?.description || o.description || '')
+      .replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    lines.push(`| ${i + 1} | ${o.object_name || ''} | ${o.change_type || ''} | ${o.field_name || ''} | ${sev} | ${desc} |`);
+  });
+  if ((report.impacted_objects || []).length > 20) {
+    lines.push('', `_…and ${(report.impacted_objects.length - 20)} more — see the report panel below for the full list._`);
+  }
+  return lines.join('\n');
+}
+
+function _reportToMarkdown(report) {
+  const lines = [
+    '# Vault Impact Analysis Report',
+    '',
+    `**Session:** ${report.session_id || 'n/a'}`,
+    `**Generated:** ${new Date().toISOString()}`,
+    '',
+  ];
+  if (report.summary) {
+    lines.push('## Summary', '');
+    const total = report.summary.total_impacted_objects != null
+      ? report.summary.total_impacted_objects
+      : (report.impacted_objects || []).length;
+    lines.push(`- Total impacted objects: ${total}`);
+    if (report.summary.high_severity_count != null) lines.push(`- High/Critical: ${report.summary.high_severity_count}`);
+    if (report.summary.medium_severity_count != null) lines.push(`- Medium: ${report.summary.medium_severity_count}`);
+    if (report.summary.low_severity_count != null) lines.push(`- Low: ${report.summary.low_severity_count}`);
+    lines.push('');
+  }
+  lines.push('## Impacted Components', '');
+  lines.push('| # | Object | Change | Field | Area | Severity | Description |');
+  lines.push('|---|--------|--------|-------|------|----------|-------------|');
+  let n = 1;
+  for (const obj of (report.impacted_objects || [])) {
+    const areas = obj.impacted_areas && obj.impacted_areas.length ? obj.impacted_areas : [{}];
+    for (const a of areas) {
+      const row = [
+        n++,
+        obj.object_name || '',
+        obj.change_type || '',
+        obj.field_name || '',
+        a.area_name || '',
+        (a.risk || obj.overall_severity || '').toUpperCase(),
+        (a.description || obj.description || '').replace(/\|/g, '\\|').replace(/\n/g, ' '),
+      ];
+      lines.push('| ' + row.join(' | ') + ' |');
+    }
+  }
+  return lines.join('\n');
+}
+
+function _summariseReport(r) {
+  const objs = r.impacted_objects || [];
+  const total = objs.length;
+  const _s = o => (o.overall_severity || _deriveSeverity(o.impacted_areas || [])).toUpperCase();
+  const crit = objs.filter(o => _s(o) === 'CRITICAL').length;
+  const high = objs.filter(o => _s(o) === 'HIGH').length;
+  const med  = objs.filter(o => _s(o) === 'MEDIUM').length;
+  const low  = objs.filter(o => _s(o) === 'LOW').length;
+  const hiStr = crit + high > 0 ? `${crit + high} high/critical, ` : '';
+  return `Analysis complete — ${total} impacted areas found (${hiStr}${med} medium, ${low} low). See the detailed report below.`;
+}
+
+function _typeBreakdownBar(objects) {
+  if (!objects.length) return '';
+  const counts = {};
+  objects.forEach(o => {
+    const lbl = _typeLabel(o.object_type || '');
+    counts[lbl] = (counts[lbl] || 0) + 1;
+  });
+  const pills = Object.entries(counts)
+    .sort(([,a],[,b]) => b - a)
+    .map(([t, n]) => `<span class="type-pill">${n} ${t}${n > 1 ? 's' : ''}</span>`)
+    .join('');
+  return `<div class="type-bar"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-right:4px">By Type:</span>${pills}</div>`;
+}
+
+function _emptyState(filterLabel, hasRawResponse) {
+  if (hasRawResponse) {
+    return `<div style="padding:32px 16px;text-align:center;color:var(--muted);">
+      <i class="ti ti-alert-triangle" style="font-size:36px;color:var(--warn);margin-bottom:8px;display:block"></i>
+      <div style="font-weight:700;color:var(--warn);margin-bottom:6px">Response Format Issue</div>
+      <div style="font-size:11px">The agent returned a response but it could not be parsed as a structured report.</div>
+      <div style="font-size:11px;margin-top:4px">Check the chat bubble above for the raw response.</div>
+    </div>`;
+  }
+  const label = filterLabel && filterLabel !== 'Full Analysis' ? filterLabel.toLowerCase() : 'configuration';
+  return `<div style="padding:48px 24px;text-align:center;">
+    <div style="width:48px;height:48px;border-radius:50%;background:#d1fae5;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px;">✓</div>
+    <div style="font-size:15px;font-weight:700;color:var(--ok);margin-bottom:6px">No Impacts Found</div>
+    <div style="font-size:12px;color:var(--muted);max-width:360px;margin:0 auto;line-height:1.6">
+      Your Vault's <strong>${esc(label)}</strong> is not affected by these data model changes.
+      No action is required for this area.
+    </div>
+  </div>`;
+}
+
+function _changeTypeBadge(ct) {
+  if (!ct) return '';
+  const clean = ct.replace(/_/g, ' ');
+  if (ct === 'NEW_FIELD' || ct === 'NEW_OBJECT') return `<span class="ct-new">${esc(clean)}</span>`;
+  if (ct === 'DEPRECATED') return `<span class="ct-dep">${esc(clean)}</span>`;
+  if (ct === 'FIELD_TYPE_CHANGE' || ct === 'RENAMED') return `<span class="ct-mod">${esc(clean)}</span>`;
+  return `<span class="ct-other">${esc(clean)}</span>`;
+}
+
+// ─── Report panel ─────────────────────────────────────────────────────────────
+let _rptFilter = 'all';
+let _rptSearch = '';
+
+function renderReportPanel(stage, report, filterLabel) {
+  const panel = document.getElementById('report-panel-' + stage);
+  if (!panel) return;
+  panel.innerHTML = buildReportHTML(report, filterLabel || 'Full Analysis');
+  panel.style.display = 'block';
+  document.getElementById('chat-messages-' + stage).classList.add('compact');
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+}
+
+function buildReportHTML(r, filterLabel) {
+  const s = r.summary || {};
+  const meta = r.analysis_metadata || {};
+  const objects = r.impacted_objects || [];
+  const noImpact = r.no_impact_confirmed || [];
+  const total = objects.length;   // always use actual row count so stats match table
+  const _getSev = o => (o.overall_severity || _deriveSeverity(o.impacted_areas || [])).toUpperCase();
+  const critN   = objects.filter(o => _getSev(o) === 'CRITICAL').length;
+  const highN   = objects.filter(o => _getSev(o) === 'HIGH').length;
+  const medN    = objects.filter(o => _getSev(o) === 'MEDIUM').length;
+  const lowN    = objects.filter(o => _getSev(o) === 'LOW').length;
+  const hiCritN = critN + highN;
+  const findings = s.key_findings || [];
+  const title = meta.data_model_doc_name || r.data_model_doc_name || 'Impact Analysis';
+  const configSrc = meta.config_report_name || r.config_report_source || '';
+  const analyzedAt = meta.analyzed_at || new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const vaultName = meta.vault_name || '';
+  const isFull = !filterLabel || filterLabel === 'Full Analysis';
+  _rptFilter = 'all'; _rptSearch = '';
+  _reportObjects = objects;  // store for explainImpact lookups
+
+  const metaParts = [
+    (vaultName && vaultName !== 'null') ? `<span class="report-meta-item">🏢 ${esc(vaultName)}</span>` : '',
+    configSrc   ? `<span class="report-meta-item">📋 Config: ${esc(configSrc)}</span>` : '',
+    `<span class="report-meta-item">📅 Analyzed: ${esc(analyzedAt)}</span>`,
+  ].filter(Boolean).join('');
+
+  const _badgeMap = {
+    'Integrations': '#ede9fe:#5b21b6', 'Fields': '#dbeafe:#1d4ed8',
+    'Objects': '#dbeafe:#1d4ed8', 'Workflows': '#fef3c7:#92400e',
+    'Page Layouts': '#e0e7ff:#3730a3', 'Picklists': '#fce7f3:#9d174d',
+    'Roles': '#f0fdf4:#166534',
+    'High Severity': '#fee2e2:#991b1b', 'Medium Severity': '#fef3c7:#92400e',
+    'Low Severity': '#d1fae5:#065f46', 'Full Analysis': '#f1f5f9:#475569',
+    'Explain': '#f0f9ff:#0369a1',
+  };
+  // Compound labels like "Integrations — High Severity" inherit base type color
+  const baseLabel = filterLabel.split(' — ')[0];
+  const filterBadgeColor = _badgeMap[filterLabel] || _badgeMap[baseLabel] || '#f1f5f9:#64748b';
+  const [fbg, ftc] = filterBadgeColor.split(':');
+
+  return `<div class="report-panel">
+    <div class="report-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div class="report-label" style="margin-bottom:0"><span class="report-label-dot"></span>Vault Impact Analysis</div>
+        <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:${fbg};color:${ftc};">🔍 ${esc(filterLabel)}</span>
+      </div>
+      <div class="report-title">${esc(title)}</div>
+      <div class="report-meta">${metaParts}</div>
+    </div>
+    <div class="report-stats">
+      <div class="stat-card stat-total"><div class="stat-number">${total}</div><div class="stat-label">Impacted Areas</div></div>
+      <div class="stat-card stat-high"><div class="stat-number">${hiCritN}</div><div class="stat-label">High / Critical</div></div>
+      <div class="stat-card stat-medium"><div class="stat-number">${medN}</div><div class="stat-label">Medium Severity</div></div>
+      <div class="stat-card stat-low"><div class="stat-number">${lowN}</div><div class="stat-label">Low Severity</div></div>
+    </div>
+    ${findings.length ? `<div class="findings-section">
+      <div class="findings-label">⚡ Key Findings</div>
+      <div class="findings-grid">${findings.map(f => `<div class="finding-pill">${esc(f)}</div>`).join('')}</div>
+    </div>` : ''}
+    <div class="rpt-filter-bar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-btn active" id="rptf-all" onclick="rptFilter('all')">All (${total})</button>
+      ${critN ? `<button class="filter-btn f-critical" id="rptf-critical" onclick="rptFilter('critical')">● Critical (${critN})</button>` : ''}
+      ${highN ? `<button class="filter-btn f-high" id="rptf-high" onclick="rptFilter('high')">● High (${highN})</button>` : ''}
+      ${medN  ? `<button class="filter-btn f-medium" id="rptf-medium" onclick="rptFilter('medium')">● Medium (${medN})</button>` : ''}
+      ${lowN  ? `<button class="filter-btn f-low" id="rptf-low" onclick="rptFilter('low')">● Low (${lowN})</button>` : ''}
+      <input class="rpt-search" id="rpt-search-box" placeholder="Search objects, fields…" oninput="rptSearch(this.value)"/>
+      <span class="rpt-count" id="rpt-visible-count">Showing ${total} of ${total}</span>
+    </div>
+    ${_typeBreakdownBar(objects)}
+    <div class="impact-tbl-wrap">
+      <div class="impact-tbl-head">
+        <span></span><span>#</span><span>Object / Area</span><span>Type</span>
+        <span>Severity</span><span>Change Summary</span><span>Actions Required</span>
+      </div>
+      <div id="rpt-rows">${objects.length ? objects.map((o, i) => buildTableRow(o, i)).join('') : _emptyState(filterLabel)}</div>
+    </div>
+    ${noImpact.length ? `<div class="no-impact-bar">
+      <span style="color:var(--ok);font-size:16px;line-height:1">✓</span>
+      <div><strong style="color:var(--ok)">No Impact Confirmed</strong><br>
+      <span style="color:var(--muted)">${esc(noImpact.join(', '))} — these items exist in your Vault but are not affected by the data model changes.</span></div>
+    </div>` : ''}
+  </div>`;
+}
+
+function buildTableRow(obj, idx) {
+  // Normalise new agent format (impacted_areas[]) alongside old format
+  const areas = obj.impacted_areas || [];
+  const rawSev = (obj.overall_severity || _deriveSeverity(areas)).toUpperCase();
+  const sev = rawSev.toLowerCase();
+  const sevBadge = rawSev === 'CRITICAL' ? '<span class="sev-critical">CRITICAL</span>'
+                 : rawSev === 'HIGH'     ? '<span class="sev-high">HIGH</span>'
+                 : rawSev === 'MEDIUM'   ? '<span class="sev-medium">MEDIUM</span>'
+                 :                         '<span class="sev-low">LOW</span>';
+  const objType = obj.object_type || (areas[0] && areas[0].area_type) || 'other';
+  const typeLabel = _typeLabel(objType);
+  const typeBadge = `<span class="badge ${_typeCls(objType)}">${esc(typeLabel)}</span>`;
+  // Recommendations: old format uses recommendations[], new uses impacted_areas[].recommendation
+  const recs = obj.recommendations || areas.map(a => a.recommendation).filter(Boolean);
+  const fields = obj.impacted_fields || [];
+  // Integrations: old format uses impacted_integrations[], new derives from areas
+  const ints = obj.impacted_integrations || areas
+    .filter(a => a.area_type === 'integration' || a.area_type === 'api')
+    .map(a => ({ integration_name: a.area_name, integration_type: a.area_type, severity: a.risk, notes: a.description }));
+  // Description: old format has obj.description, new has area-level descriptions
+  const description = obj.description || (areas[0] && areas[0].description) ||
+    (obj.change_type ? `${obj.change_type.replace(/_/g, ' ')} on ${obj.field_name || obj.object_name}` : '');
+  const hasDetails = true; // always show expand (explain buttons always present)
+  const subLabel = fields.length > 0 ? `${fields.length} field${fields.length !== 1 ? 's' : ''}`
+                 : ints.length > 0   ? `${ints.length} integration${ints.length !== 1 ? 's' : ''}` : '';
+  const expandBtn = `<button class="expand-btn" id="xbtn-${idx}" onclick="event.stopPropagation();toggleRow(${idx})">▶</button>`;
+
+  const fieldRows = fields.map(f => `<tr>
+    <td><strong style="color:var(--navy)">${esc(f.field_name)}</strong></td>
+    <td style="color:var(--muted);font-family:monospace;font-size:10px">${esc(f.old_definition||'—')}</td>
+    <td style="font-family:monospace;font-size:10px">${esc(f.new_definition||'—')}</td>
+    <td>${_changeTypeBadge(f.change_type||'')}</td>
+    <td>${_sevMini(f.severity)}</td>
+    <td style="color:var(--muted);font-size:10px">${esc(f.notes||'')}</td></tr>`).join('');
+
+  const intRows = ints.map(i => `<tr>
+    <td><strong>${esc(i.integration_name)}</strong></td>
+    <td>${esc(i.integration_type||'')}</td>
+    <td>${_sevMini(i.severity)}</td>
+    <td style="color:var(--muted)">${esc(i.notes||'')}</td></tr>`).join('');
+
+  const recsHtml = recs.length > 0
+    ? `<div class="detail-section">
+        <div class="detail-section-title">Recommendations (${recs.length})</div>
+        <ul class="recs-list">${recs.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+       </div>` : '';
+
+  const detailsHtml = `<div class="impact-row-details" id="xdet-${idx}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button onclick="explainImpact(${idx})" style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1.5px solid var(--navy);background:white;color:var(--navy);cursor:pointer;" title="Ask the agent to explain why this is impacted">
+        💬 Why is this impacted?
+      </button>
+      <button onclick="explainImpact(${idx}, 'how')" style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1.5px solid var(--violet);background:white;color:var(--violet);cursor:pointer;" title="Ask the agent how to fix this">
+        🔧 How to fix this?
+      </button>
+    </div>
+    ${recsHtml}
+    ${fields.length ? `<div class="detail-section">
+      <div class="detail-section-title">Impacted Fields (${fields.length})</div>
+      <table class="detail-tbl"><tr><th>Field</th><th>Old</th><th>New</th><th>Change</th><th>Severity</th><th>Notes</th></tr>${fieldRows}</table>
+    </div>` : ''}
+    ${ints.length ? `<div class="detail-section">
+      <div class="detail-section-title">Impacted Integrations (${ints.length})</div>
+      <table class="detail-tbl"><tr><th>Integration</th><th>Type</th><th>Severity</th><th>Notes</th></tr>${intRows}</table>
+    </div>` : ''}
+  </div>`;
+
+  const searchData = esc(((obj.object_name||'') + ' ' + description).toLowerCase());
+
+  return `<div class="impact-row" data-sev="${sev}" data-search="${searchData}">
+    <div class="impact-row-main" onclick="${hasDetails ? `toggleRow(${idx})` : ''}">
+      ${expandBtn}
+      <span class="row-num">${idx + 1}</span>
+      <span><div class="obj-name">${esc(obj.object_name)}</div>${subLabel ? `<div class="obj-sub">${esc(subLabel)}</div>` : ''}</span>
+      <span>${typeBadge}</span>
+      <span>${sevBadge}</span>
+      <span style="font-size:11px;line-height:1.5">${esc(description)}</span>
+      <span style="font-size:11px;line-height:1.5;color:var(--muted)">${esc(recs[0]||'')}</span>
+    </div>
+    ${detailsHtml}
+  </div>`;
+}
+
+function toggleRow(idx) {
+  const det = document.getElementById('xdet-' + idx);
+  const btn = document.getElementById('xbtn-' + idx);
+  if (!det) return;
+  const open = det.classList.toggle('open');
+  if (btn) {
+    btn.textContent = open ? '▼' : '▶';
+    btn.style.transform = open ? 'scale(1.1)' : '';
+  }
+  // Highlight the whole row when open
+  const row = det.closest('.impact-row');
+  if (row) row.classList.toggle('open-row', open);
+}
+
+function rptFilter(type) {
+  _rptFilter = type;
+  ['all', 'critical', 'high', 'medium', 'low'].forEach(t => {
+    const b = document.getElementById('rptf-' + t);
+    if (b) b.classList.toggle('active', t === type);
+  });
+  _applyRptFilter();
+}
+
+function rptSearch(q) {
+  _rptSearch = q.toLowerCase();
+  _applyRptFilter();
+}
+
+function _applyRptFilter() {
+  const rows = document.querySelectorAll('#rpt-rows .impact-row');
+  let vis = 0;
+  rows.forEach(row => {
+    const matchSev    = _rptFilter === 'all' || row.dataset.sev === _rptFilter;
+    const matchSearch = !_rptSearch || (row.dataset.search || '').includes(_rptSearch);
+    const show = matchSev && matchSearch;
+    row.style.display = show ? '' : 'none';
+    if (show) vis++;
+  });
+  const el = document.getElementById('rpt-visible-count');
+  if (el) el.textContent = `Showing ${vis} of ${rows.length}`;
+}
+
+function _typeLabel(t) {
+  const map = { standard_object: 'Object', document_type: 'Document', workflow: 'Workflow',
+    integration: 'Integration', integration_rules: 'Integration', report: 'Report',
+    role: 'Role', ui_rule: 'UI Rule', pagelayout: 'Page Layout' };
+  return map[t.toLowerCase()] || t.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function _typeCls(t) {
+  const map = { standard_object: 'badge-blue', document_type: 'badge-violet',
+    workflow: 'badge-amber', integration: 'badge-violet', integration_rules: 'badge-violet' };
+  return map[t.toLowerCase()] || 'badge-gray';
+}
+
+function _sevMini(s) {
+  const v = (s || '').toUpperCase();
+  return v === 'CRITICAL' ? '<span class="sev-critical" style="font-size:9px">CRIT</span>'
+       : v === 'HIGH'     ? '<span class="sev-high" style="font-size:9px">HIGH</span>'
+       : v === 'MEDIUM'   ? '<span class="sev-medium" style="font-size:9px">MED</span>'
+       :                    '<span class="sev-low" style="font-size:9px">LOW</span>';
+}
+
+function _deriveSeverity(areas) {
+  const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const risks = areas.map(a => (a.risk || 'LOW').toUpperCase());
+  for (const level of order) {
+    if (risks.includes(level)) return level;
+  }
+  return 'LOW';
+}
+
+let _reportObjects = [];   // set when report renders — used by explainImpact
+
+function explainImpact(idx, mode) {
+  const obj = _reportObjects[idx];
+  if (!obj) return;
+  const question = mode === 'how'
+    ? `How do I fix the impact on ${obj.object_name}? Give specific migration steps.`
+    : `Why is ${obj.object_name} affected by these changes? Explain in plain language.`;
+  const input = document.getElementById('chat-input-1');
+  if (input) {
+    input.value = question;
+    input.focus();
+    document.getElementById('chat-area-1').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    submitChat1();
+  }
+}
+
+function askQuickFilter(prompt) {
+  const input = document.getElementById('chat-input-1');
+  if (input) {
+    input.value = prompt;
+    submitChat1();
+  }
+}
+
+function updateIntelWithReport(report) {
+  const s = report.summary || {};
+  const total = s.total_impacted_objects !== undefined ? s.total_impacted_objects : (report.impacted_objects||[]).length;
+  const high  = s.high_severity_count || 0;
+  intelSetStage1(
+    `${total} objects · ${high} HIGH`,
+    high > 0 ? 'High Impact' : 'Completed',
+    high > 0 ? '#fee2e2' : '#d1fae5',
+    high > 0 ? '#991b1b' : '#065f46'
+  );
+  updateIntel(`${total} impacts found`, 'Complete', '#d1fae5', '#065f46');
+  s1Done = true;
+  runHistory.unshift({
+    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    docs: report.data_model_doc_name || 'Document',
+    objCount: total,
+    highCount: high,
+    stagesDone: 1,
+  });
+  renderHistory();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function updateIntel(sub, tagLabel, tagBg, tagColor) {
+  document.getElementById('intel-run-status').textContent = sub;
+  const t = document.getElementById('intel-run-tag');
+  t.textContent = tagLabel;
+  t.style.background = tagBg;
+  t.style.color = tagColor;
+}
+
+function showError(msg) {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:20px;right:20px;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 18px;font-size:12px;color:#991b1b;z-index:999;max-width:360px;';
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 6000);
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+async function resetAll() {
+
+  // Tell the backend to drop the session (best-effort — don't block UI on failure)
+  if (sessionId) {
+    fetch(`${API}/session/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  // ── Reset JS state ──────────────────────────────────────────────────────────
+  sessionId = null;
+  s1Done = false;
+  selectedFiles[1] = null;
+
+  // ── Reset analyzer area ─────────────────────────────────────────────────────
+  document.getElementById('stage-1-area').style.display = 'block';
+  document.getElementById('upload-area-1').style.display = 'block';
+  document.getElementById('upload-success-1').style.display = 'none';
+  document.getElementById('upload-success-text-1').textContent = '';
+  document.getElementById('upload-error-1').style.display = 'none';
+  document.getElementById('upload-error-text-1').textContent = '';
+  document.getElementById('chat-area-1').style.display = 'none';
+  document.getElementById('chat-messages-1').innerHTML = '';
+  document.getElementById('chat-messages-1').classList.remove('compact');
+  document.getElementById('report-panel-1').style.display = 'none';
+  document.getElementById('report-panel-1').innerHTML = '';
+  _lastReport = null;
+  _showExportControls(false);
+  const suggestions = document.getElementById('chat-suggestions-1');
+  if (suggestions) suggestions.classList.remove('hidden');
+  document.getElementById('chat-input-1').value = '';
+  document.getElementById('chat-input-1').disabled = false;
+  document.getElementById('chat-submit-1').disabled = false;
+  document.getElementById('chat-submit-1').textContent = 'Submit';
+
+  // Reset file input & list
+  document.getElementById('file1').value = '';
+  document.getElementById('filelist1').innerHTML = '';
+  document.getElementById('upload-btn-1').disabled = true;
+  document.getElementById('upload-hint-1').textContent = 'Select a document to enable';
+
+  // ── Reset Intel pane ────────────────────────────────────────────────────────
+  updateIntel('No run started', 'Idle', 'var(--surface)', 'var(--muted)');
+  intelSetSession(null);
+  intelSetStage1('Not started', '—', 'var(--surface)', 'var(--muted)');
+
+  // ── Navigate back to analyzer ───────────────────────────────────────────────
+  showPage('analyzer');
+}
+
+// ─── Intel pane helpers ───────────────────────────────────────────────────────
+function intelSetSession(sid) {
+  document.getElementById('intel-session').textContent = sid ? sid.substring(0, 18) + '…' : '—';
+}
+
+function intelSetStage1(detail, tagLabel, tagBg, tagColor) {
+  document.getElementById('intel-s1-detail').textContent = detail;
+  const t = document.getElementById('intel-s1-tag');
+  t.textContent = tagLabel;
+  t.style.background = tagBg;
+  t.style.color = tagColor;
+}
+
+// ─── Audit log & run history ──────────────────────────────────────────────────
+function nowStr() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function addAudit(stage, action, detail) {
+  auditLog.unshift({ time: nowStr(), stage, action, detail });
+  renderAudit();
+}
+
+function renderAudit() {
+  const rows = document.getElementById('audit-rows');
+  const empty = document.getElementById('audit-empty');
+  if (!auditLog.length) { empty.style.display = 'block'; rows.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  const stageBadge = s => s === 1 ? '<span class="badge badge-blue">Analysis</span>'
+                        : '<span class="badge badge-gray">—</span>';
+  const actionBadge = a => {
+    if (a === 'COMPLETE') return '<span class="badge badge-green">COMPLETE</span>';
+    if (a === 'ERROR')    return '<span class="badge badge-red">ERROR</span>';
+    if (a === 'RUNNING')  return '<span class="badge badge-blue">RUNNING</span>';
+    if (a === 'UPLOAD')   return '<span class="badge badge-gray">UPLOAD</span>';
+    return `<span class="badge badge-gray">${esc(a)}</span>`;
+  };
+  rows.innerHTML = auditLog.map(e => `
+    <div style="display:grid;grid-template-columns:130px 90px 100px 1fr;padding:10px 16px;border-top:1px solid var(--border);font-size:12px;gap:8px;align-items:center;">
+      <span style="color:var(--muted)">${esc(e.time)}</span>
+      <span>${stageBadge(e.stage)}</span>
+      <span>${actionBadge(e.action)}</span>
+      <span>${esc(e.detail)}</span>
+    </div>`).join('');
+}
+
+function renderHistory() {
+  const rows = document.getElementById('history-rows');
+  const empty = document.getElementById('history-empty');
+  if (!runHistory.length) { empty.style.display = 'block'; rows.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  rows.innerHTML = runHistory.map(r => {
+    const objBadge = r.objCount > 0
+      ? (r.highCount > 2 ? `<span class="badge badge-red">${r.objCount} objects</span>`
+                         : `<span class="badge badge-amber">${r.objCount} objects</span>`)
+      : '<span class="badge badge-green">0 objects</span>';
+    const sevBadge = r.highCount > 0
+      ? `<span class="badge badge-red">${r.highCount} HIGH</span>`
+      : '<span class="badge badge-green">0 HIGH</span>';
+    const stageBadge = r.stagesDone === 2
+      ? '<span class="badge badge-violet">2 / 2</span>'
+      : '<span class="badge badge-blue">1 / 2</span>';
+    return `
+      <div style="display:grid;grid-template-columns:140px 1fr 100px 100px 80px;padding:11px 16px;border-top:1px solid var(--border);font-size:12px;gap:8px;align-items:center;">
+        <span style="color:var(--muted)">Today ${esc(r.date)}</span>
+        <span>${esc(r.docs)}</span>
+        <span>${objBadge}</span>
+        <span>${sevBadge}</span>
+        <span>${stageBadge}</span>
+      </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  runHistory.length = 0;
+  renderHistory();
+}
+
+function clearAudit() {
+  auditLog.length = 0;
+  renderAudit();
+}
+
+// Poll /health on load and every 30s
+async function pollHealth() {
+  try {
+    const res = await fetch(`${API}/health`);
+    const data = await res.json();
+    const ok = data.status === 'healthy';
+    document.getElementById('intel-health-sub').textContent =
+      `Agent: ${data.checks.aws_agent_configured ? '✓' : '✗'}  S3: ${data.checks.aws_s3_configured ? '✓' : '✗'}  Storage: ${data.checks.storage_writable ? '✓' : '✗'}`;
+    const tag = document.getElementById('intel-health-tag');
+    tag.textContent = ok ? 'Healthy' : 'Degraded';
+    tag.style.background = ok ? '#d1fae5' : '#fef3c7';
+    tag.style.color = ok ? '#065f46' : '#92400e';
+  } catch {
+    document.getElementById('intel-health-sub').textContent = 'Cannot reach backend';
+    const tag = document.getElementById('intel-health-tag');
+    tag.textContent = 'Offline';
+    tag.style.background = '#fee2e2';
+    tag.style.color = '#991b1b';
+  }
+}
+pollHealth();
+setInterval(pollHealth, 30000);
+</script>
+</body>
+</html>

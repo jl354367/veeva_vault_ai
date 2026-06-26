@@ -16,6 +16,7 @@ class AnalysisStatus(str, Enum):
 
 
 class ImpactSeverity(str, Enum):
+    CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -32,13 +33,36 @@ class ImpactedField(BaseModel):
     notes: Optional[str] = None
 
 
+class ImpactedIntegration(BaseModel):
+    integration_name: str
+    integration_type: str = Field(..., description="API|Spark|VaultToVault|FTP|Other")
+    severity: ImpactSeverity
+    notes: Optional[str] = None
+
+
 class ImpactedObject(BaseModel):
     object_name: str
-    object_type: str = Field(..., description="e.g. Table, Entity, API Object")
+    object_type: str = Field(default="standard_object", description="standard_object|document_type|workflow|integration|report|role|ui_rule")
     impacted_fields: list[ImpactedField] = []
-    overall_severity: ImpactSeverity
-    description: str
+    impacted_integrations: list[ImpactedIntegration] = []
+    overall_severity: ImpactSeverity = ImpactSeverity.MEDIUM
+    description: str = ""
     recommendations: list[str] = []
+    # New agent format — raw impacted_areas passed through for the frontend
+    impacted_areas: list[dict] = []
+    # New agent format extras
+    change_type: Optional[str] = None
+    field_name: Optional[str] = None
+    field_label: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+
+
+class AnalysisMetadata(BaseModel):
+    data_model_doc_name: Optional[str] = None
+    config_report_name: Optional[str] = None
+    analyzed_at: Optional[str] = None
+    vault_name: Optional[str] = None
 
 
 class AnalysisSummary(BaseModel):
@@ -59,8 +83,10 @@ class Stage1Report(BaseModel):
     config_report_source: str = Field(
         description="S3 path or 'mock' when using placeholder"
     )
+    analysis_metadata: Optional[AnalysisMetadata] = None
     summary: Optional[AnalysisSummary] = None
     impacted_objects: list[ImpactedObject] = []
+    no_impact_confirmed: list[str] = []
     raw_llm_analysis: Optional[str] = None
     error: Optional[str] = None
 

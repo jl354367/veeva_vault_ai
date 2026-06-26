@@ -13,10 +13,13 @@ class Settings(BaseSettings):
 
     s3_config_bucket: str = ""
     s3_config_report_key: str = "config-reports/latest.json"
+    s3_vault_reports_prefix: str = "vault-reports/"
+    s3_uploads_bucket: str = ""
+    s3_uploads_prefix: str = "data-model-changes/"
 
-    aws_agent_lambda_arn: str = ""
     aws_agent_id: str = ""
     aws_agent_alias_id: str = ""
+    bedrock_model_id: str = "amazon.nova-micro-v1:0"
 
     # App
     app_env: str = "development"

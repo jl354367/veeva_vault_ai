@@ -91,6 +91,10 @@ async def _real_stage1_analysis(
     data_model_text: str,
     config_report: dict[str, Any],
 ) -> dict[str, Any]:
+    # If the config report came from S3 as parsed Excel text, use that directly.
+    # Otherwise fall back to JSON serialisation of the dict (mock / legacy path).
+    config_content = config_report.get("report_text") or json.dumps(config_report, indent=2)
+
     user_prompt = f"""## DATA MODEL CHANGES DOCUMENT
 
 {data_model_text}
@@ -99,7 +103,7 @@ async def _real_stage1_analysis(
 
 ## CONFIGURATION REPORT
 
-{json.dumps(config_report, indent=2)}
+{config_content}
 
 ---
 

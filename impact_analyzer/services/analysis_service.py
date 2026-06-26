@@ -17,9 +17,11 @@ from typing import Any
 
 from config import settings
 from models.schemas import (
+    AnalysisMetadata,
     AnalysisSummary,
     AnalysisStatus,
     ImpactedField,
+    ImpactedIntegration,
     ImpactedObject,
     ImpactSeverity,
     SessionState,
@@ -84,37 +86,47 @@ async def run_stage1(session_id: str) -> Stage1Report:
     session.stage1_report = report
 
     try:
-        # Step 1: parse document
-        logger.info("[%s] Parsing data model document", session_id)
-        data_model_text = document_parser.extract_text(doc_path)
-        if not data_model_text:
-            raise ValueError("Extracted document text is empty.")
-
-        # Step 2: fetch config report
-        logger.info("[%s] Fetching config report", session_id)
-        config_report = await aws_service.fetch_config_report_from_s3()
-        report.config_report_source = config_report.get("source", "s3")
-
-        # Step 3: trigger AWS agent (placeholder — result used if available)
-        logger.info("[%s] Triggering AWS agent (placeholder)", session_id)
-        agent_result = await aws_service.trigger_aws_agent(
-            payload={
-                "session_id": session_id,
-                "stage": 1,
-                "doc_name": doc_name,
-            },
-            stage=1,
+        # Step 1: invoke the Bedrock Agent. Claude handles tool calls and
+        # returns the analysis as JSON (when asked) which we extract here.
+        logger.info("[%s] Invoking Bedrock Agent", session_id)
+        agent_result = await aws_service.invoke_agent(
+            session_id=session_id,
+            user_message="Analyze the data model changes and return the structured JSON export.",
         )
-        logger.info("[%s] AWS agent response: %s", session_id, agent_result.get("status"))
 
-        # Step 4: LLM analysis
-        logger.info("[%s] Running LLM analysis", session_id)
-        analysis = await llm_service.run_stage1_analysis(data_model_text, config_report)
+        structured = aws_service.try_extract_report_json(agent_result.get("response", ""))
+        if structured:
+            logger.info("[%s] Bedrock Agent returned complete analysis", session_id)
+            analysis = structured
+            report.config_report_source = "bedrock-agent"
+
+        else:
+            # ── Fallback: direct S3 fetch + local LLM ─────────────────────────
+            # Used when Bedrock Agent is not configured or returned an error.
+            # Parses the locally uploaded file and fetches Config Report from S3,
+            # then calls the local LLM (mock or Anthropic Claude).
+            logger.info("[%s] Agent fallback — parsing local doc + fetching S3 config report",
+                        session_id)
+            data_model_text = document_parser.extract_text(doc_path)
+            if not data_model_text:
+                raise ValueError("Extracted document text is empty.")
+            config_report = await aws_service.fetch_config_report_from_s3()
+            report.config_report_source = config_report.get("source", "mock")
+
+            # ── LLM INTEGRATION POINT ──────────────────────────────────────────
+            # To switch from mock to real Claude (Anthropic API):
+            #   1. Set ANTHROPIC_API_KEY in .env
+            #   2. Set MOCK_LLM=false in .env
+            # ──────────────────────────────────────────────────────────────────
+            logger.info("[%s] Running LLM analysis (mock=%s)", session_id, settings.mock_llm)
+            analysis = await llm_service.run_stage1_analysis(data_model_text, config_report)
 
         # Step 5: build typed report
         report.raw_llm_analysis = json.dumps(analysis)
+        report.analysis_metadata = _build_metadata(analysis.get("metadata", {}))
         report.summary = _build_summary(analysis.get("summary", {}))
         report.impacted_objects = _build_impacted_objects(analysis.get("impacted_objects", []))
+        report.no_impact_confirmed = analysis.get("no_impact_confirmed", [])
         report.status = AnalysisStatus.COMPLETED
 
         logger.info(
@@ -134,6 +146,15 @@ async def run_stage1(session_id: str) -> Stage1Report:
 
 # ─── Data builders ────────────────────────────────────────────────────────────
 
+def _build_metadata(raw: dict[str, Any]) -> AnalysisMetadata:
+    return AnalysisMetadata(
+        data_model_doc_name=raw.get("data_model_doc_name"),
+        config_report_name=raw.get("config_report_name"),
+        analyzed_at=raw.get("analyzed_at"),
+        vault_name=raw.get("vault_name"),
+    )
+
+
 def _build_summary(raw: dict[str, Any]) -> AnalysisSummary:
     return AnalysisSummary(
         total_impacted_objects=raw.get("total_impacted_objects", 0),
@@ -144,30 +165,120 @@ def _build_summary(raw: dict[str, Any]) -> AnalysisSummary:
     )
 
 
+_RISK_ORDER = ["critical", "high", "medium", "low"]
+_CHANGE_TYPE_TO_OBJECT_TYPE = {
+    "ADD_OBJECT": "standard_object", "DELETE_OBJECT": "standard_object",
+    "ADD_FIELD": "standard_object",  "MODIFY_FIELD": "standard_object",
+    "DELETE_FIELD": "standard_object", "ADD_RELATIONSHIP": "standard_object",
+    "ADD_PICKLIST": "standard_object", "UPDATE_WORKFLOW": "workflow",
+    "UPDATE_INTEGRATIONRULE": "integration", "UPDATE_PAGELAYOUT": "pagelayout",
+}
+
+
+def _safe_severity(value: str) -> ImpactSeverity:
+    """Map a raw risk/severity string to ImpactSeverity, defaulting to MEDIUM."""
+    v = (value or "medium").lower().strip()
+    try:
+        return ImpactSeverity(v)
+    except ValueError:
+        return ImpactSeverity.MEDIUM
+
+
+def _max_severity(risks: list[str]) -> ImpactSeverity:
+    """Return the highest severity from a list of risk strings."""
+    low = [r.lower() for r in risks]
+    for level in _RISK_ORDER:
+        if level in low:
+            return _safe_severity(level)
+    return ImpactSeverity.MEDIUM
+
+
 def _build_impacted_objects(raw_list: list[dict[str, Any]]) -> list[ImpactedObject]:
     objects = []
     for raw in raw_list:
-        fields = [
-            ImpactedField(
-                field_name=f.get("field_name", ""),
-                old_definition=f.get("old_definition"),
-                new_definition=f.get("new_definition"),
-                change_type=f.get("change_type", "MODIFIED"),
-                severity=ImpactSeverity(f.get("severity", "medium").lower()),
-                notes=f.get("notes"),
+        areas = raw.get("impacted_areas", [])
+
+        if areas:
+            # ── New agent format: impacted_areas[] ────────────────────────────
+            sev = _max_severity([a.get("risk", "medium") for a in areas])
+            description = (
+                raw.get("description")
+                or (areas[0].get("description", "") if areas else "")
+                or f"{raw.get('change_type', '')} on {raw.get('field_name') or raw.get('object_name', '')}"
             )
-            for f in raw.get("impacted_fields", [])
-        ]
-        objects.append(
-            ImpactedObject(
-                object_name=raw.get("object_name", ""),
-                object_type=raw.get("object_type", "Entity"),
-                overall_severity=ImpactSeverity(raw.get("overall_severity", "medium").lower()),
-                description=raw.get("description", ""),
-                recommendations=raw.get("recommendations", []),
-                impacted_fields=fields,
+            recs = [a["recommendation"] for a in areas if a.get("recommendation")]
+
+            # Derive ImpactedField from the change itself (if it's a field-level change)
+            fields: list[ImpactedField] = []
+            if raw.get("field_name") and raw.get("change_type", "").upper() in (
+                "ADD_FIELD", "MODIFY_FIELD", "DELETE_FIELD"
+            ):
+                fields = [ImpactedField(
+                    field_name=raw.get("field_name", ""),
+                    old_definition=raw.get("old_value"),
+                    new_definition=raw.get("new_value"),
+                    change_type=raw.get("change_type", "MODIFIED"),
+                    severity=sev,
+                )]
+
+            # Derive ImpactedIntegration from integration/api areas
+            integrations: list[ImpactedIntegration] = [
+                ImpactedIntegration(
+                    integration_name=a.get("area_name", ""),
+                    integration_type=a.get("area_type", "Other"),
+                    severity=_safe_severity(a.get("risk", "medium")),
+                    notes=a.get("description"),
+                )
+                for a in areas if a.get("area_type") in ("integration", "api")
+            ]
+
+            object_type = (
+                raw.get("object_type")
+                or _CHANGE_TYPE_TO_OBJECT_TYPE.get(raw.get("change_type", ""), "standard_object")
             )
-        )
+
+        else:
+            # ── Old agent format: impacted_fields[] / impacted_integrations[] ──
+            fields = [
+                ImpactedField(
+                    field_name=f.get("field_name", ""),
+                    old_definition=f.get("old_definition"),
+                    new_definition=f.get("new_definition"),
+                    change_type=f.get("change_type", "MODIFIED"),
+                    severity=_safe_severity(f.get("severity", "medium")),
+                    notes=f.get("notes"),
+                )
+                for f in raw.get("impacted_fields", [])
+            ]
+            integrations = [
+                ImpactedIntegration(
+                    integration_name=i.get("integration_name", ""),
+                    integration_type=i.get("integration_type", "Other"),
+                    severity=_safe_severity(i.get("severity", "medium")),
+                    notes=i.get("notes"),
+                )
+                for i in raw.get("impacted_integrations", [])
+            ]
+            sev = _safe_severity(raw.get("overall_severity", "medium"))
+            description = raw.get("description", "")
+            recs = raw.get("recommendations", [])
+            object_type = raw.get("object_type", "standard_object")
+
+        objects.append(ImpactedObject(
+            object_name=raw.get("object_name", ""),
+            object_type=object_type,
+            overall_severity=sev,
+            description=description,
+            recommendations=recs,
+            impacted_fields=fields,
+            impacted_integrations=integrations,
+            impacted_areas=areas,
+            change_type=raw.get("change_type"),
+            field_name=raw.get("field_name"),
+            field_label=raw.get("field_label"),
+            old_value=raw.get("old_value"),
+            new_value=raw.get("new_value"),
+        ))
     return objects
 
 
