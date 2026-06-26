@@ -11,6 +11,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -155,6 +156,206 @@ _GREETINGS = {
 
 def _is_pure_greeting(message: str) -> bool:
     return message.strip().lower().rstrip("!.?") in _GREETINGS
+
+
+def _enforce_scope(text: str, user_message: str) -> str:
+    """
+    Post-process safety net: if the user asked for a specific category
+    (e.g. "objects only") but the agent included other category sections
+    in its response, strip the extra sections.
+
+    Operates on Markdown/prose where category headers look like:
+      Objects:
+      Fields:
+      Workflows:
+      ## Objects
+      **Fields**
+
+    Conservative — only fires when (a) we can identify the requested
+    scope from the user's message, and (b) the response actually has
+    multiple category headers. Tables, JSON, and short answers are
+    left alone.
+    """
+    if not text or len(text) < 100:
+        return text
+
+    # Reuse the same scope detection as the backend → keeps behavior aligned
+    from services.aws_service import _detect_scope_hint  # local import to avoid circular
+    scope = _detect_scope_hint(user_message)
+    if not scope:
+        return text
+
+    # Map scope description → set of acceptable category header keywords
+    scope_to_keep: dict[str, set[str]] = {
+        "objects": {"object", "objects"},
+        "fields": {"field", "fields"},
+        "workflows": {"workflow", "workflows"},
+        "lifecycles": {"lifecycle", "lifecycles"},
+        "integrations": {"integration", "integrations", "integration rule", "integration rules"},
+        "layouts": {"layout", "layouts", "page layout", "page layouts"},
+        "picklists": {"picklist", "picklists"},
+        "reports": {"report", "reports"},
+        "SDK jobs": {"sdk", "sdk job", "sdk jobs"},
+        "validation rules": {"validation", "validation rule", "validation rules"},
+        "security and roles": {"security", "role", "roles", "permission", "permissions"},
+        "objects and fields": {"object", "objects", "field", "fields"},
+    }
+    keep = scope_to_keep.get(scope)
+    if not keep:
+        return text
+
+    # All known category headers (lowercased) — for detecting drift
+    all_categories = {
+        "object", "objects", "field", "fields", "workflow", "workflows",
+        "lifecycle", "lifecycles", "integration", "integrations",
+        "integration rule", "integration rules", "layout", "layouts",
+        "page layout", "page layouts", "picklist", "picklists",
+        "report", "reports", "sdk", "sdk job", "sdk jobs",
+        "validation", "validation rule", "validation rules",
+        "security", "role", "roles", "permission", "permissions",
+    }
+
+    def _header_keyword(line: str) -> str | None:
+        """Return the canonical category keyword if the line is a header, else None."""
+        s = line.strip()
+        if not s:
+            return None
+        # Strip common header decoration: **, ##, leading bullets, trailing :
+        s = re.sub(r'^[#\-*]+\s*', '', s)
+        s = re.sub(r'\*+', '', s)
+        s = s.rstrip(":").rstrip().lower()
+        if s in all_categories:
+            return s
+        return None
+
+    lines = text.split("\n")
+    # Locate header lines + their indices
+    header_indices: list[tuple[int, str]] = []
+    for i, line in enumerate(lines):
+        kw = _header_keyword(line)
+        if kw:
+            header_indices.append((i, kw))
+
+    # Only enforce when there are 2+ section headers (multi-category response)
+    if len(header_indices) < 2:
+        return text
+
+    # Walk sections and drop those whose header isn't in `keep`
+    kept_lines: list[str] = []
+    cut_count = 0
+    for idx, (line_idx, kw) in enumerate(header_indices):
+        next_idx = header_indices[idx + 1][0] if idx + 1 < len(header_indices) else len(lines)
+        if kw in keep:
+            kept_lines.extend(lines[line_idx:next_idx])
+        else:
+            cut_count += 1
+
+    # Preserve any preamble before the first header
+    preamble_end = header_indices[0][0]
+    preamble = lines[:preamble_end]
+    result = "\n".join(preamble + kept_lines).rstrip()
+
+    if cut_count > 0:
+        logger.info("Scope enforcement: stripped %d out-of-scope section(s)", cut_count)
+
+    return result if result else text
+
+
+def _ensure_intro_line(text: str, user_message: str) -> str:
+    """
+    If a chat-mode response starts directly with a table or column-header
+    row (no conversational intro), prepend a short context sentence based
+    on what the user asked. Matches the AWS console's behavior where the
+    agent typically writes an intro line before a table.
+    """
+    if not text:
+        return text
+    stripped = text.lstrip()
+    if not stripped:
+        return text
+
+    # Detect response that starts with a markdown table or a header row
+    first_line = stripped.split("\n", 1)[0].strip()
+    starts_with_table = (
+        first_line.startswith("|")
+        or (first_line.count("\t") >= 2)
+        or bool(re.match(r'^[A-Z][\w /]+\s*\|', first_line))
+        or bool(re.match(r'^(Object|Object Name|Field|Component|Severity|Category|#)\s+\|', first_line))
+    )
+    if not starts_with_table:
+        return text
+
+    msg_low = user_message.lower()
+    if "table" in msg_low or "tabular" in msg_low:
+        if "full" in msg_low and ("analysis" in msg_low or "impact" in msg_low):
+            intro = "Here is the full impact analysis in tabular form:"
+        elif "severity" in msg_low or "critical" in msg_low or "high" in msg_low:
+            intro = "Here are the impacts grouped by severity:"
+        elif "workflow" in msg_low:
+            intro = "Here are the impacted workflows:"
+        elif "integration" in msg_low:
+            intro = "Here are the impacted integrations:"
+        elif "field" in msg_low:
+            intro = "Here are the impacted fields:"
+        elif "object" in msg_low:
+            intro = "Here are the impacted objects:"
+        elif "impact" in msg_low or "matched" in msg_low or "components" in msg_low:
+            intro = "Here is the impact summary:"
+        else:
+            intro = "Here is the requested table:"
+    else:
+        intro = "Here are the results:"
+
+    return f"{intro}\n\n{stripped}"
+
+
+def _detect_truncated_table(text: str) -> bool:
+    """
+    Detect that a markdown TABLE was cut off mid-row. Conservative —
+    only fires when:
+      - A markdown table is present (a header row followed by a `---`
+        separator row), AND
+      - The LAST line of the response is an incomplete row of that table
+        (fewer pipes than the header, no trailing `|`).
+
+    Bullet lists, prose, and lists that happen to end with a Vault API
+    name are NOT flagged. Only true mid-row table cut-offs.
+    """
+    if not text:
+        return False
+    stripped = text.rstrip()
+    if len(stripped) < 200:
+        return False
+
+    lines = [l for l in stripped.split("\n") if l.strip()]
+    if len(lines) < 4:
+        return False
+
+    # Identify the markdown table header: a line with pipes immediately
+    # followed by a separator row (---|---|---). Without a true table,
+    # we don't flag.
+    header_pipes = 0
+    for i in range(len(lines) - 1):
+        cur, nxt = lines[i], lines[i + 1]
+        if cur.count("|") >= 3 and "---" in nxt and "|" in nxt:
+            header_pipes = cur.count("|")
+            break
+
+    if header_pipes < 3:
+        return False  # no real markdown table — don't flag
+
+    last = lines[-1].rstrip()
+    last_pipes = last.count("|")
+    if last_pipes == 0:
+        return False  # last line isn't a table row at all (e.g. closing prose)
+
+    # Pipe-count mismatch with header → row was cut mid-cell
+    if last_pipes < header_pipes - 1:
+        return True
+    if not last.endswith("|") and last_pipes < header_pipes:
+        return True
+
+    return False
 
 
 def _dedupe_agent_response(text: str) -> str:
@@ -319,9 +520,8 @@ def _greeting_reply(message: str) -> str:
         return "You're welcome! Let me know when you're ready to run an analysis."
     return (
         "Hello! I'm VaultBot, your Veeva Vault impact analyst. "
-        "Ask me to analyze your data model changes — I can produce a full report, "
-        "drill into specific areas (workflows, integrations, layouts, etc.), "
-        "or export the results as JSON, CSV, or Markdown."
+        "Ask me to analyze your data model changes — I can produce a full report "
+        "or drill into specific areas (workflows, integrations, layouts, etc.)."
     )
 
 
@@ -484,6 +684,85 @@ async def stage1_chat(
     # chat-mode responses; analysis-mode summaries are too short to need it.
     if not is_analysis:
         chat_text = _dedupe_agent_response(chat_text)
+
+    # Post-process safety net for scope drift. The backend already
+    # appends a "STRICT SCOPE" hint to the agent's message, but Nova Pro
+    # sometimes still lists every category. This step deterministically
+    # removes out-of-scope section headers and their content.
+    if not is_analysis:
+        chat_text = _enforce_scope(chat_text, message)
+
+    # If the agent dove straight into a table without a conversational
+    # intro (which Nova Pro sometimes does), prepend a short context
+    # sentence so the chat bubble reads like the console output.
+    if not is_analysis:
+        chat_text = _ensure_intro_line(chat_text, message)
+
+    # If a chat-mode table was cut off mid-row by the token limit, auto-
+    # continue: wait briefly and ask the agent to resume from where it
+    # stopped, then merge the results. Capped at 2 retries to keep
+    # latency bounded and avoid infinite loops.
+    if not is_analysis and _detect_truncated_table(chat_text):
+        MAX_CONTINUATIONS = 2
+        for attempt in range(MAX_CONTINUATIONS):
+            logger.info(
+                "Truncated table detected — auto-continuing (attempt %d/%d)",
+                attempt + 1, MAX_CONTINUATIONS,
+            )
+            # Brief pause so we don't hammer Bedrock back-to-back
+            await asyncio.sleep(1.2)
+
+            # Drop the last (incomplete) table row so the continuation
+            # picks up cleanly.
+            lines = chat_text.split("\n")
+            if lines and lines[-1].count("|") > 0 and not lines[-1].rstrip().endswith("|"):
+                lines.pop()
+            cleaned_so_far = "\n".join(lines).rstrip()
+
+            continuation_prompt = (
+                "Continue the table from your previous response. "
+                "Output ONLY the missing rows that follow the last one you "
+                "completed — do NOT repeat any rows already shown, and do "
+                "NOT output the table header or any intro sentence. Use the "
+                "same `|`-separated format with the same column order. "
+                "If you are about to run out of space again, stop at a "
+                "complete row (do not cut off mid-cell)."
+            )
+            try:
+                cont_result = await aws_service.invoke_agent(
+                    session_id=session_id,
+                    user_message=continuation_prompt,
+                    bedrock_session_id=session.metadata.get("bedrock_session_id"),
+                )
+            except Exception as exc:
+                logger.warning("Auto-continuation call failed: %s", exc)
+                break
+
+            if cont_result.get("bedrock_session_id"):
+                session.metadata["bedrock_session_id"] = cont_result["bedrock_session_id"]
+
+            cont_text = (cont_result.get("response") or "").strip()
+            if not cont_text or _is_degenerate_response(cont_text):
+                logger.info("Continuation returned no usable content — stopping")
+                break
+
+            # Merge — the cleaned_so_far already ends without a trailing
+            # newline, and cont_text starts with a row, so put one newline
+            # between them.
+            chat_text = f"{cleaned_so_far}\n{cont_text}"
+
+            if not _detect_truncated_table(chat_text):
+                logger.info("Table is now complete after %d continuation(s)", attempt + 1)
+                break
+
+        # If after MAX_CONTINUATIONS attempts the table is STILL truncated,
+        # fall back to the original note so the user knows.
+        if _detect_truncated_table(chat_text):
+            chat_text = chat_text.rstrip() + (
+                "\n\n_⚠️ The response is very long. Ask for a narrower view — "
+                "e.g. **\"show only critical and high severity\"** or "
+                "**\"workflow impacts only\"** — to get the rest._"
+            )
 
     response_payload = {
         "session_id": session_id,

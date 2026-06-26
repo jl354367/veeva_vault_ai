@@ -127,6 +127,115 @@ async def upload_document_to_s3(
 
 # ─── Bedrock Agent invocation ────────────────────────────────────────────────
 
+# ─── Scope detection ─────────────────────────────────────────────────────────
+# Map a phrase that may appear in the user message → human-readable scope
+# description that we append as a hint to the agent. Kept narrow so chat-mode
+# pass-through behavior is preserved when no scope keyword is present.
+_SCOPE_PHRASES: tuple[tuple[str, str], ...] = (
+    ("objects and fields", "objects and fields"),
+    ("fields and objects", "objects and fields"),
+    ("objects only", "objects"),
+    ("just objects", "objects"),
+    ("only objects", "objects"),
+    ("fields only", "fields"),
+    ("just fields", "fields"),
+    ("only fields", "fields"),
+    ("workflows only", "workflows"),
+    ("just workflows", "workflows"),
+    ("only workflows", "workflows"),
+    ("integrations only", "integrations"),
+    ("just integrations", "integrations"),
+    ("only integrations", "integrations"),
+    ("layouts only", "layouts"),
+    ("just layouts", "layouts"),
+    ("only layouts", "layouts"),
+    ("picklists only", "picklists"),
+    ("just picklists", "picklists"),
+    ("only picklists", "picklists"),
+    ("reports only", "reports"),
+    ("just reports", "reports"),
+    ("only reports", "reports"),
+    ("sdk jobs only", "SDK jobs"),
+    ("just sdk", "SDK jobs"),
+    ("only sdk", "SDK jobs"),
+    ("lifecycles only", "lifecycles"),
+    ("validation only", "validation rules"),
+    ("security only", "security and roles"),
+)
+
+
+def _detect_scope_hint(message: str) -> str | None:
+    """
+    Return a short scope description if the user's message asks for a
+    specific subset of components (e.g. "objects and fields"), else None.
+
+    Catches three families of phrasings:
+      1. Explicit phrases from _SCOPE_PHRASES (e.g. "workflows only").
+      2. "objects AND fields" / "fields AND objects".
+      3. "(list|share|give|show) ... CATEGORY" where CATEGORY is one of
+         objects/fields/workflows/integrations/layouts/picklists/reports/
+         SDK jobs/lifecycles/validation rules/security — and the word is
+         NOT followed by " and " (so combo asks fall through to #2).
+      4. "common CATEGORY" — e.g. "common objects".
+    """
+    import re as _re
+    low = message.lower()
+
+    # 1) Direct phrase matches first
+    for phrase, scope_desc in _SCOPE_PHRASES:
+        if phrase in low:
+            return scope_desc
+
+    # 2) "objects AND fields" patterns — both categories at once
+    if _re.search(
+        r'(which|what|list|show|give\s+me|share|provide)\s+(?:the\s+)?(?:list\s+of\s+)?(?:common\s+)?objects?\s+and\s+fields?',
+        low,
+    ):
+        return "objects and fields"
+    if _re.search(
+        r'(which|what|list|show|give\s+me|share|provide)\s+(?:the\s+)?(?:list\s+of\s+)?(?:common\s+)?fields?\s+and\s+objects?',
+        low,
+    ):
+        return "objects and fields"
+
+    # Reusable building blocks for the broader patterns below
+    _action = r'(?:list|share|give|show|provide|tell\s+me)'
+    _optional_prefix = (
+        r'(?:\s+me)?'                        # "list me"
+        r'(?:\s+(?:me\s+)?the)?'             # "list the", "list me the"
+        r'(?:\s+(?:a\s+)?list\s+of)?'        # "list of"
+        r'(?:\s+(?:all|common|every|only))?' # "all", "common", "every", "only"
+        r'(?:\s+the)?'                       # extra "the"
+    )
+
+    _categories = (
+        (r'objects?',                'objects'),
+        (r'fields?',                 'fields'),
+        (r'workflows?',              'workflows'),
+        (r'lifecycles?',             'lifecycles'),
+        (r'integrations?',           'integrations'),
+        (r'(?:page\s+)?layouts?',    'layouts'),
+        (r'picklists?',              'picklists'),
+        (r'reports?',                'reports'),
+        (r'sdk(?:\s+jobs?)?',        'SDK jobs'),
+        (r'validation(?:\s+rules?)?','validation rules'),
+        (r'security(?:\s+settings?)?','security and roles'),
+    )
+
+    # 3) "(list|share|give|show) ... CATEGORY" — singular scope
+    for cat_re, scope_desc in _categories:
+        pattern = _action + _optional_prefix + r'\s+' + cat_re + r'\b(?!\s+and\s+)'
+        if _re.search(pattern, low):
+            return scope_desc
+
+    # 4) "common CATEGORY" anywhere — e.g. "what are the common objects?"
+    for cat_re, scope_desc in _categories:
+        if _re.search(r'\bcommon\s+' + cat_re + r'\b(?!\s+and\s+)', low):
+            return scope_desc
+
+    return None
+
+
 async def invoke_agent(
     session_id: str,
     user_message: str,
@@ -158,10 +267,33 @@ async def invoke_agent(
     bedrock_session_id = bedrock_session_id or str(_uuid.uuid4())
 
     # Send the user's message verbatim — same as the AWS Bedrock console
-    # does. Don't append session_id (the fetch tools default to the latest
-    # uploaded document) and don't reshape the prompt. The agent decides
-    # how to interpret the question per its instruction.
-    input_text = user_message
+    # does. The only nudge we add is an emphatic SCOPE hint when the user
+    # asks for a narrow subset (e.g. "objects only", "workflows only",
+    # "common objects", "share the fields"); Nova Pro otherwise drifts
+    # into listing every category in the report.
+    scope_hint = _detect_scope_hint(user_message)
+    if scope_hint:
+        # All categories — used to spell out what NOT to include.
+        all_cats = {
+            "objects", "fields", "workflows", "lifecycles", "integrations",
+            "layouts", "picklists", "reports", "SDK jobs",
+            "validation rules", "security and roles",
+        }
+        excluded = sorted(
+            c for c in all_cats
+            if c.lower() not in scope_hint.lower()
+        )
+        input_text = (
+            f"{user_message}\n\n"
+            f"IMPORTANT — STRICT SCOPE: the user is asking for {scope_hint} ONLY. "
+            f"Your response MUST contain ONLY {scope_hint}. "
+            f"Do NOT include any of these other categories: "
+            f"{', '.join(excluded)}. "
+            f"If you start writing a section header for one of those, "
+            f"stop immediately and remove it."
+        )
+    else:
+        input_text = user_message
 
     logger.info(
         "Invoking Bedrock Agent agentId=%s aliasId=%s session=%s",
