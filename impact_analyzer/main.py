@@ -1,5 +1,17 @@
 """
 Impact Analyzer — FastAPI application entry point.
+
+This file is the "power switch" for the whole backend:
+  • Sets up logging.
+  • Creates the FastAPI app.
+  • Configures CORS (so the browser can talk to the API).
+  • Mounts the routers (endpoints live in routers/stage1.py, stage2.py).
+  • Serves the frontend HTML at "/".
+  • Exposes /health, /health/bedrock, /health/s3, /health/lambda endpoints
+    for quick sanity checks of external services.
+  • Exposes DELETE /session/{id} — called by the frontend Reset button.
+
+Run it locally with:  python main.py   →   http://localhost:8000
 """
 
 from __future__ import annotations
@@ -20,6 +32,8 @@ from services import analysis_service
 from utils.file_utils import delete_session_files
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
+# All modules use `logging.getLogger(__name__)`; this block configures how
+# those messages show up (level + format). Development env → DEBUG, else INFO.
 
 logging.basicConfig(
     level=logging.DEBUG if settings.app_env == "development" else logging.INFO,
@@ -30,6 +44,9 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
+# Runs once at startup (before `yield`) and once at shutdown (after `yield`).
+# Used here to print a clear log line confirming which Bedrock agent alias
+# we're pointed at, so a misconfigured .env is obvious at boot.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,6 +66,9 @@ async def lifespan(app: FastAPI):
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
+# The FastAPI() instance is the whole web application. Everything else is
+# either middleware attached to it, a router mounted on it, or a route
+# decorator defined below.
 
 app = FastAPI(
     title="Impact Analyzer",
@@ -68,6 +88,9 @@ app = FastAPI(
 )
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
+# In development we allow all origins so the front-end can be served from
+# anywhere. In production this list should be locked down to the actual
+# app origin.
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,6 +102,9 @@ app.add_middleware(
 
 
 # ─── Global error handler ─────────────────────────────────────────────────────
+# If any endpoint raises an unhandled exception, this catches it and
+# returns a clean 500 response so the browser doesn't see a stack trace.
+# The full error is still logged for us to investigate.
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -90,12 +116,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
+# Wire in the actual endpoints. stage1 has the real endpoints the UI uses
+# (upload + chat). stage2 is a placeholder returning 501 until the
+# Integration Impact feature is implemented.
 
 app.include_router(stage1.router)
 app.include_router(stage2.router)
 
 
 # ─── Health / root ────────────────────────────────────────────────────────────
+# Serve the single-page frontend at "/" so it runs on the same origin as
+# the API (no CORS headaches). Everything below /api and /health/... is
+# for smoke-testing external dependencies.
 
 @app.get("/", tags=["UI"], include_in_schema=False)
 async def serve_ui():

@@ -1,10 +1,22 @@
 """
 Analysis orchestration service.
 
-Owns the in-memory session store and coordinates:
-  - Document parsing
-  - AWS agent triggering (with local LLM fallback)
-  - Report building and persistence
+Two jobs:
+  1. Session management — hold a dictionary of `SessionState` objects so
+     multiple users can use the tool at once. Each session remembers:
+       • the uploaded file's local path
+       • the Bedrock conversation session id (for context preservation)
+       • the last built report (if any)
+       • freeform metadata (last turn mode, filenames, etc.)
+     Sessions expire after settings.session_ttl_hours.
+     NOTE: this is an in-memory dictionary — restarts wipe it. For
+     production, swap for Redis or DynamoDB.
+
+  2. Legacy Stage 1 pipeline (`run_stage1`) — used only by the /stage1/run
+     API endpoint. Parses the uploaded document, fetches the config report
+     from S3, and calls either the Bedrock agent or a local LLM to build
+     a report. The chat UI does NOT go through this path — it hits
+     /stage1/chat directly.
 """
 
 from __future__ import annotations
@@ -31,12 +43,17 @@ from services import aws_service, document_parser, llm_service
 
 logger = logging.getLogger(__name__)
 
-# ─── In-memory session store ──────────────────────────────────────────────────
-# Replace with Redis or DynamoDB for production.
+# ═══════════════════════════════════════════════════════════════════════════
+# SESSION STORE
+# ═══════════════════════════════════════════════════════════════════════════
+# Simple in-memory dict keyed by session_id (a UUID string). One session
+# per uploaded document. Wiped on restart — good enough for a demo /
+# single-machine deployment; swap to Redis for horizontal scaling.
 _sessions: dict[str, SessionState] = {}
 
 
 def create_session() -> str:
+    """Create a brand-new session and return its id. Also purges expired sessions."""
     session_id = str(uuid.uuid4())
     _sessions[session_id] = SessionState(session_id=session_id)
     _purge_expired_sessions()
@@ -44,6 +61,7 @@ def create_session() -> str:
 
 
 def get_session(session_id: str) -> SessionState:
+    """Look up a session by id. Raises KeyError if it doesn't exist / expired."""
     session = _sessions.get(session_id)
     if session is None:
         raise KeyError(f"Session not found: {session_id}")
@@ -51,13 +69,19 @@ def get_session(session_id: str) -> SessionState:
 
 
 def _purge_expired_sessions() -> None:
+    """Drop sessions older than settings.session_ttl_hours."""
     cutoff = datetime.utcnow() - timedelta(hours=settings.session_ttl_hours)
     expired = [sid for sid, s in _sessions.items() if s.created_at < cutoff]
     for sid in expired:
         del _sessions[sid]
 
 
-# ─── Stage 1 ──────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# LEGACY STAGE-1 PIPELINE (used only by the /stage1/run API endpoint)
+# ═══════════════════════════════════════════════════════════════════════════
+# Called by the older synchronous "run analysis" API. Not touched by the
+# chat UI. Tries the Bedrock agent first, falls back to a local LLM if
+# the agent isn't configured.
 
 async def run_stage1(session_id: str) -> Stage1Report:
     """
@@ -144,7 +168,13 @@ async def run_stage1(session_id: str) -> Stage1Report:
     return report
 
 
-# ─── Data builders ────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA BUILDERS — turn agent JSON into strongly-typed Pydantic models
+# ═══════════════════════════════════════════════════════════════════════════
+# These helpers are ALSO used by /stage1/chat: when the agent returns
+# structured JSON, the chat endpoint calls these to build a Stage1Report
+# that can be attached to the response. They handle both the new
+# `impacted_areas` format and the legacy `impacted_fields` format.
 
 def _build_metadata(raw: dict[str, Any]) -> AnalysisMetadata:
     return AnalysisMetadata(

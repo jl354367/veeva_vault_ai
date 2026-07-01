@@ -105,14 +105,14 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,syst
 .run-btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:var(--shadow-md);}
 .run-btn:not(:disabled):active{transform:translateY(0);}
 /* LLM chat */
-.llm-panel{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);}
+.llm-panel{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;max-height:calc(100vh - var(--topbar-h) - 180px);}
 .llm-input-row .llm-send{flex-shrink:0;border-radius:9px;}
-.llm-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,#FAFBFE,var(--white));}
+.llm-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,#FAFBFE,var(--white));flex-shrink:0;}
 .llm-header-title{font-size:13px;font-weight:700;letter-spacing:-0.01em;}
-.llm-messages{padding:0;min-height:80px;max-height:72vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
-.llm-messages.has-msgs{padding:14px;min-height:420px;}
-.llm-messages.compact{min-height:200px;max-height:45vh;}
-.llm-input-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
+.llm-messages{padding:0;min-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;flex:1;}
+.llm-messages.has-msgs{padding:14px;min-height:200px;}
+.llm-messages.compact{min-height:160px;}
+.llm-input-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0;background:var(--white);}
 .msg{max-width:88%;padding:11px 15px;border-radius:14px;font-size:12.5px;line-height:1.6;box-shadow:var(--shadow-sm);}
 .msg-user{background:linear-gradient(135deg,var(--navy),var(--navy-deep));color:white;align-self:flex-end;border-bottom-right-radius:4px;font-weight:500;}
 .msg-ai{background:var(--white);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px;border:1px solid var(--border);}
@@ -380,15 +380,31 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,syst
 </div><!-- /app -->
 
 <script>
-// ─── State ────────────────────────────────────────────────────────────────────
-const API = window.location.origin.startsWith('file:') ? 'http://localhost:8000' : '';
-let sessionId = null;
-let s1Done = false;
-let selectedFiles = { 1: null };
-const auditLog = [];       // [{time, stage, action, detail}]
-const runHistory = [];     // [{date, docs, objects, highCount, stagesDone}]
+/* ============================================================================
+   VaultBot Impact Analyzer — Frontend logic
+   ----------------------------------------------------------------------------
+   Sections (in order of appearance):
+     1. State & global variables
+     2. Navigation (sidebar page switching)
+     3. File upload flow (drag/drop, validate, POST /stage1/upload)
+     4. Chat flow (submit, thinking indicator, render messages)
+     5. Markdown rendering (tables, code fences, lists — used in chat bubbles)
+     6. JSON recovery + export helpers (JSON / CSV / Markdown downloads)
+     7. Report panel (interactive impact table with severity filters)
+     8. Reset / audit log / run history / health polling
+   ========================================================================== */
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
+// ─── 1. State ────────────────────────────────────────────────────────────────
+// Global variables that different sections share.
+const API = window.location.origin.startsWith('file:') ? 'http://localhost:8000' : '';
+let sessionId = null;              // set once the user uploads a file
+let s1Done = false;                // flag toggled after first successful analysis
+let selectedFiles = { 1: null };   // holds the File object picked in the dropzone
+const auditLog = [];               // [{time, stage, action, detail}] — Audit Log page
+const runHistory = [];             // [{date, docs, objects, highCount, stagesDone}] — Run History page
+
+// ─── 2. Navigation ───────────────────────────────────────────────────────────
+// Sidebar clicks: switch which "page" div is visible in the main area.
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
@@ -396,7 +412,10 @@ function showPage(name) {
   document.getElementById('nav-' + name)?.classList.add('active');
 }
 
-// ─── File handling ────────────────────────────────────────────────────────────
+// ─── 3. File handling ────────────────────────────────────────────────────────
+// Wire up the dropzone: click, drag-over, drop, and the hidden <input type="file">.
+// Once a file is picked, processFile() shows the file item and enables the
+// Upload button. Actual network upload happens in uploadFile1() below.
 function triggerFileInput(id) { document.getElementById(id).click(); }
 
 function onDragOver(e, dzId) { e.preventDefault(); document.getElementById(dzId).classList.add('dragging'); }
@@ -452,7 +471,9 @@ function enableRun(n) {
   if (hint) hint.textContent = 'Ready — click Upload';
 }
 
-// ─── Stage 1 ──────────────────────────────────────────────────────────────────
+// ─── 3a. Upload endpoint call ────────────────────────────────────────────────
+// POSTs the selected file to /stage1/upload. On success, collapses the upload
+// card, remembers the session_id, reveals the chat panel, and scrolls to it.
 async function uploadFile1() {
   const file = selectedFiles[1];
   if (!file) { alert('Please select a file first.'); return; }
@@ -507,6 +528,10 @@ async function uploadFile1() {
   }
 }
 
+// ─── 4. Chat flow ────────────────────────────────────────────────────────────
+// The user types a message → we POST it to /stage1/chat, show a "thinking"
+// bubble while waiting, then render the agent's response as a chat bubble.
+// If the response includes a structured report, also populate the report panel.
 async function submitChat1() {
   const input = document.getElementById('chat-input-1');
   const msg = input.value.trim();
@@ -666,6 +691,12 @@ function appendChatMsg(stage, text, role, isAnalysis) {
   box.scrollTop = box.scrollHeight;
 }
 
+// ─── 5. Markdown rendering ───────────────────────────────────────────────────
+// Full-featured markdown-to-HTML converter used to render agent replies
+// inside chat bubbles: supports **bold**, `inline code`, bullet/numbered
+// lists, headers (# ## ###), ```code fences```, and | markdown | tables |.
+// Tables and code fences are extracted first (as placeholders) so their
+// pipes/brackets aren't accidentally HTML-escaped.
 function _renderMarkdown(text) {
   if (!text) return '';
   // ── 0. Extract and stash code fences and tables BEFORE escaping, so their
@@ -767,6 +798,11 @@ function _escape(s) {
 
 // ─── JSON recovery helpers ────────────────────────────────────────────────────
 
+// ─── 6. JSON recovery + export helpers ───────────────────────────────────────
+// _tryParseAnalysisJSON: client-side fallback if the backend JSON parser
+// missed one. _showExportControls / exportReport / _reportToCSV /
+// _reportToMarkdown: power the JSON / CSV / Markdown download buttons.
+
 /**
  * Try to extract a valid Vault analysis JSON object from an arbitrary string.
  * Uses bracket-depth tracking to find balanced { } blocks, exactly as the
@@ -863,34 +899,6 @@ function _reportToCSV(report) {
   return rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\n');
 }
 
-function _reportToChatBubbleTable(report) {
-  const objs = (report.impacted_objects || []).slice(0, 20);
-  if (!objs.length) return '';
-  const summary = report.summary || {};
-  const total = summary.total_changes || summary.total_impacted_objects || objs.length;
-  const totalAreas = summary.total_impacted_areas
-    || objs.reduce((n, o) => n + (o.impacted_areas?.length || 0), 0);
-
-  const lines = [
-    `**Analysis complete** — ${total} change${total === 1 ? '' : 's'} affecting ${totalAreas} configuration area${totalAreas === 1 ? '' : 's'}.`,
-    '',
-    '| # | Object | Change | Field | Risk | Summary |',
-    '|---|--------|--------|-------|------|---------|',
-  ];
-  objs.forEach((o, i) => {
-    const risks = (o.impacted_areas || []).map(a => (a.risk || '').toUpperCase());
-    const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
-    const sev = order.find(r => risks.includes(r)) || (o.overall_severity || '').toUpperCase() || '—';
-    const desc = (o.impacted_areas?.[0]?.description || o.description || '')
-      .replace(/\|/g, '\\|').replace(/\n/g, ' ');
-    lines.push(`| ${i + 1} | ${o.object_name || ''} | ${o.change_type || ''} | ${o.field_name || ''} | ${sev} | ${desc} |`);
-  });
-  if ((report.impacted_objects || []).length > 20) {
-    lines.push('', `_…and ${(report.impacted_objects.length - 20)} more — see the report panel below for the full list._`);
-  }
-  return lines.join('\n');
-}
-
 function _reportToMarkdown(report) {
   const lines = [
     '# Vault Impact Analysis Report',
@@ -930,18 +938,6 @@ function _reportToMarkdown(report) {
     }
   }
   return lines.join('\n');
-}
-
-function _summariseReport(r) {
-  const objs = r.impacted_objects || [];
-  const total = objs.length;
-  const _s = o => (o.overall_severity || _deriveSeverity(o.impacted_areas || [])).toUpperCase();
-  const crit = objs.filter(o => _s(o) === 'CRITICAL').length;
-  const high = objs.filter(o => _s(o) === 'HIGH').length;
-  const med  = objs.filter(o => _s(o) === 'MEDIUM').length;
-  const low  = objs.filter(o => _s(o) === 'LOW').length;
-  const hiStr = crit + high > 0 ? `${crit + high} high/critical, ` : '';
-  return `Analysis complete — ${total} impacted areas found (${hiStr}${med} medium, ${low} low). See the detailed report below.`;
 }
 
 function _typeBreakdownBar(objects) {
@@ -987,7 +983,11 @@ function _changeTypeBadge(ct) {
   return `<span class="ct-other">${esc(clean)}</span>`;
 }
 
-// ─── Report panel ─────────────────────────────────────────────────────────────
+// ─── 7. Report panel ─────────────────────────────────────────────────────────
+// The interactive impact report shown below the chat when structured JSON
+// comes back from the backend. Includes severity stats, filter chips,
+// search, By-Type breakdown, and expandable rows for per-area details.
+// _rptFilter / _rptSearch drive the client-side filtering.
 let _rptFilter = 'all';
 let _rptSearch = '';
 
@@ -1279,14 +1279,6 @@ function expandUploadCard() {
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function askQuickFilter(prompt) {
-  const input = document.getElementById('chat-input-1');
-  if (input) {
-    input.value = prompt;
-    submitChat1();
-  }
-}
-
 function updateIntelWithReport(report) {
   const s = report.summary || {};
   const total = s.total_impacted_objects !== undefined ? s.total_impacted_objects : (report.impacted_objects||[]).length;
@@ -1331,7 +1323,9 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ─── Reset ────────────────────────────────────────────────────────────────────
+// ─── 8. Reset / state cleanup ────────────────────────────────────────────────
+// Called by the Reset button. Tells the backend to drop the session and
+// wipes all UI state so a new upload starts from a clean slate.
 async function resetAll() {
 
   // Tell the backend to drop the session (best-effort — don't block UI on failure)

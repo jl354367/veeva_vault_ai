@@ -1,10 +1,23 @@
 """
-AWS integration layer.
+AWS integration layer — the only file that talks to AWS.
 
-Fetches the latest Vault Configuration Report Excel from S3 and provides a
-thin pass-through to the Bedrock Agent.  The agent (Claude 3 Sonnet) handles
-intent recognition, tool orchestration, and output format on its own — this
-module simply forwards the user's message and returns the raw response.
+Three responsibilities:
+  1. S3 uploads — write the user's Data Model Changes file into S3.
+  2. S3 reads   — grab the latest Config Report Excel from S3 (fallback path;
+                  normally the Bedrock agent's action group fetches it).
+  3. Bedrock    — send the user's chat message to the Bedrock agent and
+                  return the agent's raw text response.
+
+Layout of this file:
+  • Small helpers (_boto_client, _is_aws_configured, _parse_excel_to_text).
+  • Public S3 functions (fetch_config_report_from_s3, upload_document_to_s3).
+  • Scope-hint helpers (_SCOPE_PHRASES, _detect_scope_hint) — used by
+    invoke_agent to add a "STRICT SCOPE" directive when the user asks for
+    a specific category (e.g. "workflows only").
+  • invoke_agent — the star of the file. Wraps boto3's Bedrock call.
+  • JSON extraction helpers (try_extract_report_json,
+    _normalize_to_new_schema, _parse_agent_json, _repair_truncated_json)
+    used by the router to pull structured data out of the agent's text.
 """
 
 from __future__ import annotations
@@ -20,10 +33,21 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-# ─── helpers ──────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# LOW-LEVEL HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 def _boto_client(service: str):
-    """Return a boto3 client; import is deferred so the app starts without AWS creds."""
+    """
+    Build a boto3 client for the given service (e.g. "s3", "bedrock-agent-runtime").
+
+    - Read timeout is 300s because Bedrock Agent responses can take 2-3 minutes
+      when the agent invokes its own Lambda action groups.
+    - boto3 is imported inside the function so the app can start even
+      when boto3 isn't installed (e.g. during local UI-only development).
+    - When AWS credentials aren't in .env, boto3 falls back to the default
+      credential chain (IAM role, ~/.aws/credentials, env vars).
+    """
     import boto3
     from botocore.config import Config
     # Bedrock Agent responses (with action groups) can take 2-3 minutes
@@ -36,13 +60,20 @@ def _boto_client(service: str):
 
 
 def _is_aws_configured() -> bool:
+    """True if we have enough config to talk to S3."""
     return bool(settings.s3_config_bucket and settings.aws_region)
 
 
 # ─── Excel parser ─────────────────────────────────────────────────────────────
+# Only used by the S3 fallback path — the Bedrock agent's own action group
+# reads Excel files inside AWS Lambda, so this rarely runs in production.
 
 def _parse_excel_to_text(excel_bytes: bytes) -> str:
-    """Convert Excel bytes to plain text (all sheets concatenated)."""
+    """
+    Flatten an Excel workbook into a plain-text string, one line per row,
+    columns joined with ' | '. Concatenates all sheets. Used when we need
+    to feed Excel content to an LLM as raw text.
+    """
     import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(excel_bytes), read_only=True, data_only=True)
@@ -58,7 +89,9 @@ def _parse_excel_to_text(excel_bytes: bytes) -> str:
     return "\n".join(parts)
 
 
-# ─── S3 ───────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# S3 — download config report, upload user documents
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def fetch_config_report_from_s3(
     bucket: str | None = None,
@@ -125,12 +158,16 @@ async def upload_document_to_s3(
     return uri
 
 
-# ─── Bedrock Agent invocation ────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# SCOPE DETECTION
+# ═══════════════════════════════════════════════════════════════════════════
+# When the user asks a scoped question (e.g. "workflows only" or
+# "list of common objects"), we detect the requested category and pass
+# it as a STRICT SCOPE directive alongside the user's message.
+# _SCOPE_PHRASES catches direct phrasings; _detect_scope_hint below
+# also uses regex patterns for natural phrasings like
+# "share the workflows" or "list of common integrations".
 
-# ─── Scope detection ─────────────────────────────────────────────────────────
-# Map a phrase that may appear in the user message → human-readable scope
-# description that we append as a hint to the agent. Kept narrow so chat-mode
-# pass-through behavior is preserved when no scope keyword is present.
 _SCOPE_PHRASES: tuple[tuple[str, str], ...] = (
     ("objects and fields", "objects and fields"),
     ("fields and objects", "objects and fields"),
@@ -236,6 +273,10 @@ def _detect_scope_hint(message: str) -> str | None:
     return None
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# BEDROCK AGENT — main entry point used by /stage1/chat
+# ═══════════════════════════════════════════════════════════════════════════
+
 async def invoke_agent(
     session_id: str,
     user_message: str,
@@ -324,97 +365,13 @@ async def invoke_agent(
         }
 
 
-async def invoke_agent_broad(
-    session_id: str,
-    user_message: str,
-    bedrock_session_id: str | None = None,
-) -> dict[str, Any]:
-    """
-    For broad queries that exceed Nova Pro's output token limit, split the
-    request into 3 scoped calls and merge the resulting impacted_objects.
-
-    Each scoped call returns a short enough response to fit in the token
-    budget, then we deduplicate by (object_name, change_type, field_name)
-    and merge the impacted_areas arrays.
-    """
-    scopes = [
-        "workflows and lifecycle impacts only",
-        "integrations and api impacts only",
-        "objects fields page layouts security validation rules reports templates only",
-    ]
-
-    merged: dict[tuple, dict] = {}
-    # Use a FRESH Bedrock session for each scoped call. If we reused the
-    # parent session, the agent could carry over prose/table mode from
-    # earlier conversation turns and return non-JSON answers, causing the
-    # merge to fail. Each scoped call must start clean so the instruction's
-    # JSON output contract applies.
-    final_bedrock_sid = bedrock_session_id
-
-    for scope in scopes:
-        logger.info("Broad query — scoped call: %s", scope)
-        result = await invoke_agent(
-            session_id=session_id,
-            user_message=scope,
-            bedrock_session_id=None,  # fresh session per scoped call
-        )
-        # Track only the LAST scoped session id so follow-up turns can resume
-        # if the user wants to continue from the merged report context.
-        final_bedrock_sid = result.get("bedrock_session_id", final_bedrock_sid)
-
-        structured = try_extract_report_json(result.get("response", ""))
-        if not structured:
-            logger.warning("Scoped call '%s' returned no parseable JSON", scope)
-            continue
-
-        for obj in structured.get("impacted_objects", []):
-            key = (
-                (obj.get("object_name") or "").lower(),
-                (obj.get("change_type") or "").lower(),
-                (obj.get("field_name") or "").lower(),
-            )
-            if key not in merged:
-                merged[key] = dict(obj)
-                merged[key].setdefault("impacted_areas", [])
-            else:
-                existing = merged[key].setdefault("impacted_areas", [])
-                seen = {a.get("area_name", "").lower() for a in existing}
-                for area in obj.get("impacted_areas", []):
-                    if area.get("area_name", "").lower() not in seen:
-                        existing.append(area)
-                        seen.add(area.get("area_name", "").lower())
-
-    all_objects = list(merged.values())
-    if not all_objects:
-        return {
-            "status": "ok",
-            "response": (
-                "I couldn't extract impacted objects from any of the scoped queries. "
-                "Try asking for a specific area — e.g., \"workflow impacts only\"."
-            ),
-            "bedrock_session_id": final_bedrock_sid,
-        }
-
-    total_areas = sum(len(o.get("impacted_areas", [])) for o in all_objects)
-    combined = {
-        "session_id": session_id,
-        "summary": {
-            "total_changes": len(all_objects),
-            "total_impacted_areas": total_areas,
-        },
-        "impacted_objects": all_objects,
-    }
-
-    prose = (
-        f"Analysis complete — found {len(all_objects)} changes affecting "
-        f"{total_areas} configuration areas (aggregated from 3 scoped queries)."
-    )
-    return {
-        "status": "ok",
-        "response": f"{prose}\n\n{json.dumps(combined, ensure_ascii=False)}",
-        "bedrock_session_id": final_bedrock_sid,
-    }
-
+# ═══════════════════════════════════════════════════════════════════════════
+# JSON EXTRACTION — pull structured report data out of the agent's text
+# ═══════════════════════════════════════════════════════════════════════════
+# The agent normally answers in prose, but when the user asks for
+# "as JSON" / "export" it also embeds a big JSON object. These helpers
+# find that JSON, parse it, repair truncation if needed, and normalise
+# legacy field names → new schema so the frontend always sees one shape.
 
 def try_extract_report_json(text: str) -> dict[str, Any] | None:
     """
@@ -620,7 +577,11 @@ def _extract_nested_dict(text: str, key: str) -> dict[str, Any] | None:
         return None
 
 
-# ─── Mock data (used when AWS is not configured) ──────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# MOCK DATA
+# ═══════════════════════════════════════════════════════════════════════════
+# Returned by fetch_config_report_from_s3 when the S3 bucket isn't
+# configured, so the app can still boot without AWS credentials.
 
 def _mock_config_report() -> dict[str, Any]:
     return {"source": "mock", "objects": [], "integrations": []}

@@ -1,12 +1,31 @@
 """
-Stage 1 router.
+Stage 1 router — the main brain of the app.
 
 Endpoints:
-  POST /stage1/upload          – upload Data Model Changes Document
-  POST /stage1/run             – trigger analysis (synchronous)
-  POST /stage1/chat            – conversational chat with the Bedrock Agent
-  GET  /stage1/status/{sid}    – lightweight status poll
-  GET  /stage1/report/{sid}    – fetch the completed report
+  POST /stage1/upload          – user drops the Data Model Changes file
+  POST /stage1/chat            – user types a question → agent answers
+  POST /stage1/run             – (API only) synchronous full-pipeline run
+  GET  /stage1/status/{sid}    – (API only) check if a report exists yet
+  GET  /stage1/report/{sid}    – (API only) fetch the last report
+
+The UI only calls /upload and /chat. The other endpoints are kept for
+external tools / API consumers.
+
+Structure of this file:
+  1. Imports + logger.
+  2. `/upload` endpoint — save file locally + push to S3.
+  3. `/run`, `/status` endpoints — legacy synchronous API.
+  4. Small helpers used by the chat endpoint:
+       • _is_pure_greeting / _greeting_reply
+       • _is_degenerate_response
+       • _dedupe_agent_response
+       • _enforce_scope
+       • _ensure_intro_line
+       • _detect_truncated_table
+  5. `/chat` endpoint — the main conversational flow. Does the pass-through
+       to Bedrock plus all the safety nets (auto-retry, dedup, scope
+       enforcement, truncation auto-continue, intro line).
+  6. `/report/{sid}` endpoint — API-only report fetcher.
 """
 
 from __future__ import annotations
@@ -32,7 +51,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stage1", tags=["Stage 1 — Data Model Impact"])
 
 
-# ─── Upload ───────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# UPLOAD ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════════
+# User picks a file in the UI → this endpoint validates, saves it locally,
+# then pushes a copy to S3. It also creates a fresh session (or reuses an
+# existing one) and remembers the local file path inside the session's state
+# so the chat endpoint can find it later.
 
 @router.post("/upload", summary="Upload Data Model Changes Document")
 async def upload_data_model_doc(
@@ -82,7 +107,14 @@ async def upload_data_model_doc(
     }
 
 
-# ─── Run (synchronous full analysis) ──────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# LEGACY API — /run and /status
+# ═══════════════════════════════════════════════════════════════════════════
+# The UI doesn't call these — they're only here for external API consumers
+# who want a one-shot "run analysis, give me the report" call instead of
+# the interactive chat flow. Under the hood they go through
+# analysis_service.run_stage1() which can fall back to a local LLM if
+# Bedrock isn't configured.
 
 @router.post("/run", response_model=Stage1RunResponse, summary="Run Stage 1 Analysis")
 async def run_stage1(
@@ -144,6 +176,16 @@ async def get_stage1_status(session_id: str):
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# CHAT-ENDPOINT HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
+# These small functions do the "smart" post-processing on whatever text
+# the Bedrock agent returns. They're invoked in order from stage1_chat().
+# Each one is intentionally small and reversible — if any of them
+# misbehaves for a specific prompt, that single helper can be dropped
+# without affecting the rest of the pipeline.
+
+# ─── Greeting shortcut ────────────────────────────────────────────────────────
 # Pure greetings — handled directly in the backend so the agent isn't tempted
 # to launch a full analysis just because a session_id is in the context.
 # Kept intentionally tiny — anything else still goes to the agent.
@@ -155,8 +197,14 @@ _GREETINGS = {
 
 
 def _is_pure_greeting(message: str) -> bool:
+    """True if the message is exactly a common greeting (case/punct insensitive)."""
     return message.strip().lower().rstrip("!.?") in _GREETINGS
 
+
+# ─── Scope enforcement ────────────────────────────────────────────────────────
+# The user might type "list only the workflows" but Nova Pro sometimes
+# ignores that scope and lists every category. This helper detects
+# category headers in the response and drops the ones the user didn't ask for.
 
 def _enforce_scope(text: str, user_message: str) -> str:
     """
@@ -261,6 +309,12 @@ def _enforce_scope(text: str, user_message: str) -> str:
     return result if result else text
 
 
+# ─── Intro-line prefix ────────────────────────────────────────────────────────
+# When Nova Pro dives straight into a table with no opening sentence, this
+# helper prepends a short human-friendly intro like "Here is the requested table:"
+# based on what the user asked for. Purely cosmetic — matches how the AWS
+# test console typically formats its answers.
+
 def _ensure_intro_line(text: str, user_message: str) -> str:
     """
     If a chat-mode response starts directly with a table or column-header
@@ -308,6 +362,12 @@ def _ensure_intro_line(text: str, user_message: str) -> str:
 
     return f"{intro}\n\n{stripped}"
 
+
+# ─── Truncation detector ──────────────────────────────────────────────────────
+# Nova Pro has an output token limit. If a big table gets cut mid-row we
+# want to know so we can auto-continue. This function returns True only
+# when we can prove the last table row is incomplete (fewer pipes than
+# the header). Conservative on purpose — false positives would annoy the user.
 
 def _detect_truncated_table(text: str) -> bool:
     """
@@ -357,6 +417,11 @@ def _detect_truncated_table(text: str) -> bool:
 
     return False
 
+
+# ─── Response dedup ───────────────────────────────────────────────────────────
+# Nova Pro sometimes lists the same items twice — once as bullets, then
+# again as "Here are the X grouped by category:" — violating RULE 11 of
+# the agent instruction. This trims the repeated section.
 
 def _dedupe_agent_response(text: str) -> str:
     """
@@ -430,6 +495,11 @@ def _dedupe_agent_response(text: str) -> str:
     return text
 
 
+# ─── Incomplete-response detector (defensive, currently unused) ────────────────
+# Kept here for optional use when we want to detect mid-content cutoff
+# outside of tables (e.g. bullet lists). Not wired into the chat pipeline
+# today because it was too aggressive for legitimate short answers.
+
 def _looks_incomplete(text: str) -> bool:
     """
     Detect a chat-mode response that was cut off mid-content. Common
@@ -456,6 +526,12 @@ def _looks_incomplete(text: str) -> bool:
         return True
     return False
 
+
+# ─── Degenerate output detector ───────────────────────────────────────────────
+# Catches obvious garbage from the model — character-run loops
+# ('" " " " ..."), rationale leaks ("The User's goal is..."), or the same
+# line repeated 8+ times. When detected we show a friendly "try a narrower
+# question" message instead of the garbage.
 
 def _is_degenerate_response(text: str) -> bool:
     """
@@ -514,6 +590,10 @@ def _is_degenerate_response(text: str) -> bool:
     return False
 
 
+# ─── Greeting reply text ──────────────────────────────────────────────────────
+# The one-liner shown when the backend short-circuits a greeting instead
+# of calling Bedrock. Different text for "Thanks" vs "Hi".
+
 def _greeting_reply(message: str) -> str:
     lowered = message.strip().lower().rstrip("!.?")
     if lowered in {"thanks", "thank you", "thx", "ty"}:
@@ -525,7 +605,19 @@ def _greeting_reply(message: str) -> str:
     )
 
 
-# ─── Chat (thin pass-through to Bedrock Agent) ────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# CHAT ENDPOINT — the main flow
+# ═══════════════════════════════════════════════════════════════════════════
+# Called every time the user hits Submit in the UI. Order of operations:
+#
+#   1. Greeting → hardcoded reply (no Bedrock call)
+#   2. Otherwise call Bedrock via services.aws_service.invoke_agent
+#   3. If chat-mode response looks like JSON → auto-retry as plain text
+#   4. If chat-mode response has a truncated table → auto-continue to
+#      fetch the missing rows and merge (up to 2 tries)
+#   5. Post-processing chain: dedup → scope-enforce → intro-line
+#   6. Only when the user explicitly asked for JSON export do we build
+#      the Stage1Report and attach it to the response payload
 
 @router.post("/chat", summary="Chat with the Vault Impact agent")
 async def stage1_chat(
@@ -789,7 +881,12 @@ async def stage1_chat(
     return response_payload
 
 
-# ─── Report ───────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# REPORT-FETCH ENDPOINT (API only)
+# ═══════════════════════════════════════════════════════════════════════════
+# The last structured report is stored on the session by /chat whenever
+# the user explicitly asked for JSON. This endpoint just returns that
+# stored report. The UI doesn't call it — external tools might.
 
 @router.get("/report/{session_id}", response_model=Stage1Report, summary="Get Stage 1 Report")
 async def get_stage1_report(session_id: str):
